@@ -1,16 +1,17 @@
-# Extract data from the list of books at BARD 
+# Extract data from the list of books at BARD
+# OBSOLETE
 # https://nlsbard.loc.gov
 #
 require 'set'
 
 class Massager
-  attr_accessor :output_buf, :line, :info, :filters, :all_categories, :selected_categories, 
+  attr_accessor :output_buf, :line, :info, :filters, :all_categories, :selected_categories,
     :entries
 
 	def initialize
 #		puts "Starting"
 		@output_buf = ''
-    @filters = {:categories_reject=>Set[:Romance, :"Fantasy Fiction", :"Science and Technology", :"Stage and Screen", :"Mystery and Detective Stories", :"True Crime", 
+    @filters = {:categories_reject=>Set[:Romance, :"Fantasy Fiction", :"Science and Technology", :"Stage and Screen", :"Mystery and Detective Stories", :"True Crime",
     :"Science Fiction", :"Medical Fiction", :"Historical romance fiction", :"Suspense Fiction", :"Psychology and Self-Help", :Computers, :"Romantic suspense fiction", :"Spanish Language", :"Diet and Nutrition", :"Occult and the Paranormal", :"Religious Fiction", :"Western Stories", :"Sports and Recreation", :Gardening, :"Supernatural and Horror Fiction"
       ]}
     @all_categories = Set[]
@@ -29,7 +30,7 @@ class Massager
 		@outfile = File.open(filebase+"_output.txt",'w+')
 		@is_blank = true
 	end
-	
+
   def init_info
     @info = {:title=>'', :categories=> Set[], :cat_sw=>false, :entry_line=>0,
              :section=> 'xx', :blurb => '' }
@@ -50,7 +51,7 @@ class Massager
 
   def is_blank # blank line
 	#	return @line =~ /Download #{@info[:title]}/
-    return (@line.strip == "")  
+    return (@line.strip == "")
   end
 
   def append_with_space (object_to_append)
@@ -85,7 +86,7 @@ class Massager
     #puts "New: section=#{@info[:section]}"
     end
     # puts "section=#{@info[:section]}, @line.length = #{@line.length}"
-    if (@info[:section] == :categories && @line.length > 60) || (@line.length > 100) then 
+    if (@info[:section] == :categories && @line.length > 60) || (@line.length > 100) then
       #puts ">>>>>>>>>>>>>>>>>>>>>>>>>>>"
       @info[:section] = :blurb  # this just HAS to be the blurb/description
       @output_buf = ''
@@ -99,7 +100,7 @@ class Massager
       when @line =~ /Read by (.*)/
         @info[:read_by] = $1
         @info[:section] = :categories
-      when @info[:section] == :categories 
+      when @info[:section] == :categories
  #       puts "^^"+@info[:categories].join
         if (is_blank && @info[:categories].count > 0) then # blank ends list of categories
              # this happens if there are not categories, i.e. in periodicals
@@ -116,11 +117,11 @@ class Massager
 		append_with_space(@line.lstrip) unless @line =~ /^Download/ # This merges lines ignoring leading whitespace
 #    puts "&" + @output_buf
 #                                   # Requires writing _before_ processing
-    # put any processing here, 
+    # put any processing here,
 #
     @was_blank = is_blank
 	end
-	
+
   def process_before_output(buffer)
     if buffer =~ /\. ([^\.]*(Award|Prize)[^\.]*)\. ([0-9]{4})\./ #Prizes, Awards
        @info[:prizes] = $1
@@ -128,23 +129,23 @@ class Massager
     if buffer =~ /\. ([0-9]{4})\./
       @info[:year] = $1
     end
-    if buffer =~ /commercial audiobook/i 
+    if buffer =~ /commercial audiobook/i
       @info[:product] = "commercial audiobook"
-    end 
-    category_string = @info[:categories].to_a.join(', ') 
+    end
+    category_string = @info[:categories].to_a.join(', ')
     buffer = [@info[:author], @info[:title], @info[:date], category_string, @info[:year], @info[:prizes], @output_buf].join("|")
-    return buffer 
+    return buffer
   end
 
 	def do_output
 #    puts "do_output #{@info}"
-    if accept_entry? 
+    if accept_entry?
       @output_buf = process_before_output(@output_buf)
       @outfile.puts @output_buf
       @selected_categories += @info[:categories] # Add to list of selected categories
     end
   #    puts '>>' + @output_buf
-    @output_buf = '' 
+    @output_buf = ''
     @info[:section] = ''
     init_info
 	end
@@ -171,15 +172,15 @@ class Massager
       if is_end_of_entry? then
         @within_entry = false
         @info[:entry_line] = 0
-      else 
+      else
         if @within_entry then
-          process_line  
+          process_line
         end
-      end  
+      end
       return if @info[:entry_line] > 25
     }
-		 
-	end # 
+
+	end #
 
 	def main
 		process_lines
@@ -202,4 +203,3 @@ end # class
 
 m = Massager.new
 m.main
-
