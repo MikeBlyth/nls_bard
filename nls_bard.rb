@@ -1,6 +1,6 @@
 require 'selenium-webdriver'
 #****************************************************************************
-# If you get an error about chromeddriver being outdated or incompatible, then go to 
+# If you get an error about chromeddriver being outdated or incompatible, then go to
 # https://chromedriver.chromium.org/downloads
 # and download the version that matches the current version of Chrome. Hopefully there will
 # always be a compatible one!
@@ -12,13 +12,14 @@ require 'date'
 require 'pry'
 require './goodreads.rb'  # Allows us to access the ratings on Goodreads
 require './nls_bard_sequel.rb' # interface to database
-require './nls_book_class.rb'  
+require './nls_book_class.rb'
 require './nls_bard_command_line_options.rb'
 require 'shellwords'  # turns string into command-line-like args
 require 'csv'
 require 'zip'
 require 'byebug'
 require 'nameable'
+require 'readline'
 
 @book_number = 0
 
@@ -51,9 +52,9 @@ def process_page(page) # Process raw HTML and return array of plain text entries
   if lp  # last page link found
     # lp will be URL something like "https://nlsbard.loc.gov:443/nlsbardprod/search/title/page/2/sort/s/local/0/srch/Q/"
     lp.text =~ /page\/([0-9]+)\//i
-    @last_page = $1.to_i  
+    @last_page = $1.to_i
   else # no last page link, so this is the only page for this letter
-    @last_page = 1 
+    @last_page = 1
   end
   books_noko = parsed.xpath("//span[@lang='EN']") # Array of Nokogiri objects
   books_noko.search('.//h2').remove  # These are Date headings
@@ -64,11 +65,11 @@ end
 
 def next_line(lines)
   k = lines
- 
+
   while lines.first.strip == '' || lines.first.length < 3  ## Because there may be a funny, non-std blank that doesn't strip
     lines.shift
   end
-#  binding.pry 
+#  binding.pry
  return nil if lines == []
   nxt = lines.shift
   #puts ">" + nxt
@@ -90,7 +91,7 @@ def process_entry(entry) # Generate Book from an entry
   book[:key] = $2  # The DBxxxx
   book[:title].sub!(/ *\/ *$/, '')  # get rid of trailing slash in title
   book[:title].sub!(/\. *$/,'') # get rid of trailing period
- # binding.pry 
+ # binding.pry
   # AUTHOR
   book[:author] = next_line(lines).unicode_normalize  # This should be only the author(s)
 #  byebug if book[:author] =~ /O\'/
@@ -100,7 +101,7 @@ def process_entry(entry) # Generate Book from an entry
   if book[:author] =~ /(.*[a-z])\.$/  # Strip trailing . but not if it's part of an initial like F. Hope only author is on this line
     book[:author] = $1
   end
-  
+
   # READING TIME
   reading_time = next_line(lines)
   if reading_time =~ /Reading time: (([0-9]+) hours)?([\., ]+?)? ?(([0-9]+) minutes)?/
@@ -114,21 +115,21 @@ def process_entry(entry) # Generate Book from an entry
   if read_by =~ /Read by (.*)/
     book[:read_by] = $1
   else  # Read by is missing, so this must be the first (or only) category
-    lines.unshift read_by  # put the category back into lines so we'll read it next	
+    lines.unshift read_by  # put the category back into lines so we'll read it next
   end
-  
-  # BLURB 
+
+  # BLURB
   if lines.last =~ /Download /  # Should always be there as last line
     lines.pop
   end
-  book[:blurb] = lines.pop # Last line before Download link, 
-  
+  book[:blurb] = lines.pop # Last line before Download link,
+
   # CATEGORIES
-  lines.each do |line| 
+  lines.each do |line|
     book.add_category line if (line > '') and (line =~ /(production)|(National)|(NLS)/).nil?
-  end	
+  end
   return book
-end    
+end
 
 def get_resume_mark
   return(['A',1]) unless File.exist?('nls_bard_bookmark.txt')
@@ -150,7 +151,7 @@ end
 def iterate_pages(start_letter, start_num)
   initialize_nls_bard_chromium
   @last_page = start_num  # will be re-determined from next page read
-  @test_limit = 999 # Pages per letter - 
+  @test_limit = 999 # Pages per letter -
   @max_books_per_page = 9999
   letters = (start_letter..'Z').to_a
   letters.each do |letter|
@@ -159,14 +160,14 @@ def iterate_pages(start_letter, start_num)
 	else
 	  num = 1
 	end
-		while (num <= @last_page) and (num <= @test_limit) 
+		while (num <= @last_page) and (num <= @test_limit)
 			save_resume_mark(letter, num)
 			@book_number = 0
 			base_url = "https://nlsbard.loc.gov/nlsbardprod/search/title/page/<page>/sort/s/srch/<letter>/local/0"
 			page = get_page(letter,num, base_url)  # i.e. puts HTML into page; get_page returns nil if finished
 			entries = process_page(page)
-			puts "\n************************ PAGE #{letter}: #{num} of #{@last_page} ***********************" 
-			entries.each do |e| 
+			puts "\n************************ PAGE #{letter}: #{num} of #{@last_page} ***********************"
+			entries.each do |e|
 			  @book_number += 1
 			  break if @book_number > @max_books_per_page
 			  book = process_entry(e)
@@ -183,15 +184,15 @@ def iterate_pages(start_letter, start_num)
 		end
 		save_resume_mark("!",9999)
 	end
-	  
-end  
+
+end
 
 def iterate_update_pages(days)
     initialize_nls_bard_chromium
 	@last_page = 1
     num = 1  # Starting page number
 	letter = '-' # Just a placeholder
-	base_url = 
+	base_url =
 	 # "https://nlsbard.loc.gov/nlsbardprod/search/recently_added/page/<page>/sort/s/local/0/day/#{days}/srch/recently_added/"
      # "https://nlsbard.loc.gov/nlsbardprod/search/recently_added/page/1/sort/s/srch/recently_added/local/0/day/#{days}/until/now/"
 	 # The format of the 'select so many recent days' request isn't working, so will just say "recently added". However
@@ -201,8 +202,8 @@ def iterate_update_pages(days)
 		@book_number = 0
 		page = get_page('', num, base_url)  # i.e. puts HTML into page; get_page returns nil if finished
 		entries = process_page(page)
-		puts "\n************************ PAGE #{letter}: #{num} of #{@last_page} ***********************" 
-		entries.each do |e| 
+		puts "\n************************ PAGE #{letter}: #{num} of #{@last_page} ***********************"
+		entries.each do |e|
 		  @book_number += 1
 		  book = process_entry(e)
 
@@ -222,7 +223,7 @@ def iterate_update_pages(days)
 				  existing_book = @mybooks.get_book(book[:key])
 				  book[:stars] = existing_book[:stars]  # Fill these in
 				  book[:ratings] = existing_book[:ratings]
-				end  
+				end
 				@outfile.puts book.to_s
 			end
 			puts "#{book[:stars]} (#{book[:ratings]}): #{book[:title]} <#{book[:author]}> <#{book[:categories]}>"
@@ -231,11 +232,11 @@ def iterate_update_pages(days)
 		num += 1
 		# return if @book_number > 4
 	end
-end  
+end
 
 def read_all
 	letter, page = get_resume_mark
-	if letter == "!" 
+	if letter == "!"
 	  raise "Entire catalog already read. Delete nls_bard_bookmark.txt and re-run if you want another pass."
 	end
 	@outfile = File.open("nls_bard_books.txt",'a') # append to existing file
@@ -278,7 +279,7 @@ def list_books_by_filter(filter)
 #	books.each {|book| puts "#{book[:key]} | #{book[:author]}, #{book[:title]}"}
 	if books
 	    if $verbose
-			books.each do |book_hash| 
+			books.each do |book_hash|
 				book = Book.new(book_hash) #{screen_output}"
 				book.display(screen_output)  # Book needs to know how to format, for screen or a file
 				puts ''
@@ -288,7 +289,7 @@ def list_books_by_filter(filter)
 		end
 	else
 		puts "*** NO MATCHING BOOKS FOUND ***"
-	end  
+	end
 end
 
 def download(key)
@@ -306,7 +307,7 @@ end
 def initialize_database
   @mybooks = BookDatabase.new
   @books = @mybooks.books
-  
+
 end
 
 def initialize_nls_bard_chromium
@@ -321,7 +322,7 @@ def wrap_up
   @nls_driver.quit if @nls_driver
   @outfile.close if @outfile
   $stdout = @original_stdout
-end  
+end
 
 def screen_output
   return $stdout == @original_stdout
@@ -356,9 +357,9 @@ def rating_update_needed(book)
 #byebug if book[:key] == 'xxx'
 #byebug if book[:goodreads_title] == 'no match xxx'
 #  return ( $manual_update && (book[:goodreads_title] == 'no match xxx')) # !!!! This lets us visit ONLY "no match" titles if on manual update
-#  return xtitle =~ /A prayer for the city/i  # Use this line to check only certain title 
+#  return xtitle =~ /A prayer for the city/i  # Use this line to check only certain title
   return (gtitle == 'no match xxx')  # Use this line only to update ALL records with "no match"
-  if (book[:stars_date].nil?) || 
+  if (book[:stars_date].nil?) ||
      ((Date.today - book[:stars_date]).to_i > -1) then
 	needed = true if book[:ratings].nil? || book[:ratings] < 10000000  # Use lower number once all have been rated once
   end
@@ -370,7 +371,7 @@ def update_ratings
 #  books_to_update = @mybooks.books_with_desired_category.order(:key) # Use this one to update only the desired-category books
   books_to_update = @mybooks.books.order(:title)  ### Update all books
   books_to_update.each do |bookhash|
-	i = i+1 
+	i = i+1
     next if i < 42860
 	book = Book.new(bookhash)
 #	puts i, bookhash[:title]
@@ -404,8 +405,8 @@ def zip_backups
   rescue
     puts "*********** ERROR WHILE ZIPPING FILES OR DELETING TEMP FILES *********"
 	raise
-end  
-   
+end
+
 def handle_command(command_line)
 #
 	if command_line.is_a? String
@@ -415,12 +416,12 @@ def handle_command(command_line)
 	end
 
 	options = Optparse.parse(args) # Parse, label the options
-	
+
 	# Runtime options
 	$verbose = options.verbose
 	$debug = options.debug
 	$manual_update = options.manual_update
-	
+
 	# Filters
 	filters = {}
 	filters[:title] = options.title
@@ -430,7 +431,7 @@ def handle_command(command_line)
 	puts 'filters loaded' if $debug
 	binding.pry if $debug
 
-	if options.getnew > 0  
+	if options.getnew > 0
 		puts "getting books added in past #{options.getnew} days"
 		read_updates(options.getnew)
 	end
@@ -441,7 +442,7 @@ def handle_command(command_line)
 		$stdout.reopen(options.output,"w")
 #		pp $stdout, @original_stdout, ($stdout == @original_stdout), ($stdout === @original_stdout)
 	end
-	
+
 	if options.find && filters.count > 0
 		list_books_by_filter(filters)
 	end
@@ -469,7 +470,7 @@ def handle_command(command_line)
 		selected = @books.where(:key=>options.mark)
 		selected.update(bookmarked: true)
 		puts "Bookmarked:"
-		selected.each {|book| puts "\t#{book[:key]} | #{book[:title]}"} 
+		selected.each {|book| puts "\t#{book[:key]} | #{book[:title]}"}
 	end
 
 	if options.unmark != []
@@ -479,7 +480,7 @@ def handle_command(command_line)
 			puts "--ALL--"
 		else
 			selected = @books.where(:key=>options.unmark)
-			selected.each {|book| puts "\t#{book[:key]} | #{book[:title]}"} 
+			selected.each {|book| puts "\t#{book[:key]} | #{book[:title]}"}
 		end
 		selected.update(bookmarked: false)
 	end
@@ -487,25 +488,25 @@ def handle_command(command_line)
 	if options.marked
 		selected = @books.where(:bookmarked)
 		puts "Bookmarked:"
-		selected.each {|book| puts "\t#{book[:key]} | #{book[:title]}"} 
+		selected.each {|book| puts "\t#{book[:key]} | #{book[:title]}"}
 	end
-	
+
 	if options.backup
 		backup_tables
 		zip_backups
 	end
-	
+
 	if options.download != []
 		puts "Downloading #{options.download}"
 		options.download.each {|key| download(key)}
 	end
-	
+
 	if options.update_ratings
 	    update_ratings
     end
-	
+
 	binding.pry if $debug
-	
+
 	ensure
 	  $stdout = @original_stdout
 end
@@ -516,7 +517,7 @@ def normalize
 	   normalized_author = b[:author].unicode_normalize
 	   normalized_title = b[:title].unicode_normalize
        #puts "#{i.to_s}\tb[:title]"
-       if (normalized_author != b[:author]) || (normalized_title != b[:title]) 	   
+       if (normalized_author != b[:author]) || (normalized_title != b[:title])
 		   b[:author] = normalized_author
 		   b[:title]  = normalized_title
 		   @mybooks.update_book_author_title(b)
@@ -533,12 +534,14 @@ end
 @logged_in = false
 initialize_database
 args = ARGV
+Readline::History.push(args.join(' '))
 
-while (args != []) 
+while (args != [])
    handle_command args
    puts
    puts "Enter command or 'quit'"
-   command_line = gets.chomp
+#   command_line = gets.chomp
+   command_line = Readline.readline('> ', true)
    args = command_line.shellsplit
    exit if args == [] || args[0] =~ /(exit)|(end)|(quit)/i
 end
