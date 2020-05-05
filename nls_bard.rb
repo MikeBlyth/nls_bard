@@ -225,8 +225,8 @@ def iterate_update_pages(days)
 				  book[:ratings] = existing_book[:ratings]
 				end
 				@outfile.puts book.to_s
+				puts "#{book[:stars]} (#{book[:ratings]}): #{book[:title]} <#{book[:author]}> <#{book[:categories]}>"
 			end
-			puts "#{book[:stars]} (#{book[:ratings]}): #{book[:title]} <#{book[:author]}> <#{book[:categories]}>"
 		  end
 		end
 		num += 1
@@ -348,44 +348,47 @@ def backup_tables
   dump_table_yaml('cat_book.yaml',@mybooks.cat_book)
 end
 
-def rating_update_needed(book)
+def rating_update_needed(book) # For now, this is adjusted by changing the code! ******************
   return false if book[:language] != 'English'
-  needed = false
-  xtitle = book[:title] || ''
-  gtitle = book[:goodreads_title] || ''
+#  interesting = @mybooks.is_interesting(book[:key], :minimum_stars=>0, :minimum_ratings=>0 )
+  update_interval = 60 # days since last check
+  max_ratings_needed = 1000000  # Can use lower number once all have been rated once
+  time_for_update = (book[:stars_date].nil?) || ((Date.today - book[:stars_date]).to_i >= update_interval)
+  rating_criteria = book[:ratings].nil? || book[:ratings] < max_ratings_needed
+  return time_for_update && rating_criteria
+
+#  xtitle = book[:title] || ''
+#  gtitle = book[:goodreads_title] || ''
 #  puts "#{book[:title]} | #{book[:goodreads_title][0..20]} | #{n}"
-#byebug if book[:key] == 'xxx'
-#byebug if book[:goodreads_title] == 'no match xxx'
+#  byebug if book[:key] == 'xxx'
+#  byebug if book[:goodreads_title] == 'no match xxx'
 #  return ( $manual_update && (book[:goodreads_title] == 'no match xxx')) # !!!! This lets us visit ONLY "no match" titles if on manual update
 #  return xtitle =~ /A prayer for the city/i  # Use this line to check only certain title
-  return (gtitle == 'no match xxx')  # Use this line only to update ALL records with "no match"
-  if (book[:stars_date].nil?) ||
-     ((Date.today - book[:stars_date]).to_i > -1) then
-	needed = true if book[:ratings].nil? || book[:ratings] < 10000000  # Use lower number once all have been rated once
-  end
-  return needed
+# return (gtitle == 'no match xxx')  # Use this line only to update ALL records with "no match"
+
 end
 
 def update_ratings
   i = 0
 #  books_to_update = @mybooks.books_with_desired_category.order(:key) # Use this one to update only the desired-category books
-  books_to_update = @mybooks.books.order(:title)  ### Update all books
+#  books_to_update = @mybooks.books.order(:title)  ### Update all books
+  books_to_update = @mybooks.books_with_desired_category.order(:key)  ### Update books of desired categories
   books_to_update.each do |bookhash|
 	i = i+1
-    next if i < 42860
 	book = Book.new(bookhash)
-#	puts i, bookhash[:title]
 	# Time to update rating?
 	if rating_update_needed(book)
 	  old_stars = book[:stars]
-	  old_ratings = book[:ratings]
+	  old_ratings = book[:ratings] || 0
 	  book.get_rating
 	  stars = book[:stars]
-	  ratings = book[:ratings]
-	  puts "#{i}: (#{old_stars}, #{old_ratings}) -> (#{stars}, #{ratings}) | #{book[:key]} | #{book[:title]}"
-	  @mybooks.update_book_rating(book)
+	  ratings = book[:ratings]|| 0
+	  if ratings > old_ratings then
+		  puts "#{i}: (#{old_stars}, #{old_ratings}) -> (#{stars}, #{ratings}) | #{book[:key]} | #{book[:title]}"
+		  @mybooks.update_book_rating(book)
+	  end
 	  sleep(1)
-	  sleep(10) if i%20==0
+	  sleep(10) if i %20 == 0  # pause after every 20th update to make Goodreads happy
 	end
 #	binding.pry
    end

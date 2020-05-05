@@ -41,7 +41,7 @@ def get_goodreads_info # Manually (from operator) Get the title, author, and rat
 	print "Goodreads title: "
 	goodreads_title = gets.strip
 	return {goodreads_title: 'ignore'} if (goodreads_title.downcase == 'i') || (goodreads_title.downcase == 'ignore')
-	  
+
 	print "Goodreads author: "
 	goodreads_author = gets.strip
 	print "Stars: "
@@ -98,9 +98,9 @@ def title_strings(title)
 		title = punct_strip $1
 		search_strings << title
     end
-	if title =~ /\&/ 
+	if title =~ /\&/
 		search_strings << title.gsub(/\&/,'and')
-	end	
+	end
 	return search_strings
 end
 
@@ -115,8 +115,9 @@ end
 
 def goodreadsRating(book)
     # Use the goodreads_title and _author fields if they exist; they're the best ones for searching goodreads
-	if (book[:goodreads_author] || '') > ''
-	  author = book[:goodreads_author]
+	gr_auth = (book[:goodreads_author] || '').strip # there may be some stray fields with nil or ' ' instead of ''
+	if gr_auth > ''
+	  author = gr_auth
 	  author_orig = author.clone
 	else
 	    author = book[:author] || ''
@@ -146,25 +147,25 @@ def goodreadsRating(book)
     	author_try = author_array.shift
 	    parsed_page = get_goodreads_page(title, author_try)
 		not_found = goodreads_not_found(parsed_page)
-    end		
+    end
 	not_found = true
 	while (title_array.count > 0) && (not_found) # Keep using smaller chunks of title until a match is found
     	title_try = title_array.shift
 # puts "\tTrying #{title_try}"
 	    parsed_page = get_goodreads_page(title_try, author_try)
 		not_found = goodreads_not_found(parsed_page)
-    end		
+    end
 	if not_found
-	  puts "No Goodreads match found for #{title} by #{author_orig}."
+	  puts "No Goodreads match found for #{book[:key]} #{title} by #{author_orig}."
 #	  byebug
 	  if $manual_update
 		chrome_goodreads_page(title, author_last_name)
 		return get_goodreads_info
 	  else
 		return {:goodreads_title => 'no match xxx', :match => false}
-	  end		 
+	  end
 	end
-	
+
 #	ratings = parsed_page.xpath("//span[@class='minirating']")
 #    title_xpath = title.downcase.gsub(/\'/,'$')
 #	byebug if author_last_name.nil?
@@ -185,7 +186,7 @@ def goodreadsRating(book)
 	     rating_info = get_goodreads_info
 	   else
          rating_info = {:goodreads_title => 'no match xxx', :match => false}
-       end		 
+       end
 	end
 	return rating_info
 end
@@ -194,7 +195,7 @@ def get_stars(ratings) # Find highest rated entry among the array of matching mi
     max_count = -1
 	max_stars = 0
 	ratings.each do |r|
-		rating_string = r.children[1].to_s  
+		rating_string = r.children[1].to_s
 		if rating_string =~ /([0-9\.]*) avg rating .* ([0-9\.,]*) rating/ then
 			stars,count = $1.to_f, $2.gsub(/,/,'').to_i
 			if count > max_count
@@ -204,7 +205,7 @@ def get_stars(ratings) # Find highest rated entry among the array of matching mi
 		end
 	end
 	return {stars: max_stars, count: max_count}
-end	
+end
 
 def search_goodreads_entries(parsed_page,title, author) # Returns array of <span class=minirating>...</span> elements containing ratings
     # If there is more than one matching Goodreads entry matching target title and author strings, all will be returned
@@ -220,7 +221,7 @@ def search_goodreads_entries(parsed_page,title, author) # Returns array of <span
 		ratings = parsed_page.xpath(xpath_expr) # will be empty if not found
 		found = ratings.count > 0
 #		puts "#{title_xpath}: #{found}"
-    end	
-    ratings = nil if ratings.count == 0	
+    end
+    ratings = nil if ratings.count == 0
     return ratings
 end
