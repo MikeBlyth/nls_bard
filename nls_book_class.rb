@@ -5,52 +5,52 @@ require 'colorize'
 
 class Book < Hash
   attr_accessor :category_array
-  
+
   @@fields = [:author, :title, :stars, :ratings, :categories, :year, :awards, :target_age, :reading_time, :key, :blurb, :read_by]
-  
+
   def fields
     @@fields
   end
 
   def to_s
     post_initialize
-	return [self[:author], self[:title], self[:stars], self[:ratings], self[:categories], self[:year], self[:awards], 
+	return [self[:author], self[:title], self[:stars], self[:ratings], self[:categories], self[:year], self[:awards],
 	   self[:target_age],self[:reading_time],
 	self[:key], self[:blurb], self[:read_by]].join("|")
   end
-  
+
   def display(screen_output = true)
     post_initialize
 	title = self[:title]
-	title = title.yellow if screen_output	 
+	title = title.yellow if screen_output
 	s = ["#{title} by #{self[:author]}. #{self[:year]}. #{self[:key]}" ,
 		"#{self[:stars]} stars with #{self[:ratings]} ratings.",
 		self[:blurb] + " Reading time #{self[:reading_time]} hours.",
 	    self[:categories],
 		]
-	if self[:has_read] 
+	if self[:has_read]
 	  s << "Read or downloaded #{self[:date_downloaded]}."
 	end
 	s.each {|s| puts WordWrap.ww(s,90)}
 	puts
   end
-	
+
   def description
     post_initialize
 	title = self[:title]
-	s = ["#{title}, by #{self[:author]}. Published in #{self[:year]}. ", 
+	s = ["#{title}, by #{self[:author]}. Published in #{self[:year]}. ",
 		"This book has #{self[:stars]} stars with #{self[:ratings]} ratings. ",
 		"Description: " + self[:blurb] + " The reading time is #{self[:reading_time]} hours.",
 		 "The NLS number is #{self[:key]}."]
 	s.each {|t| puts t}
 	puts
   end
-  
+
   def first_name_first(author='')
    # if author =~ /([^,]+*), ([^;]+)(; .*)/
-	# Try /([^,]+), ([^;]+)(, ((I+)|(Jr\.)))(; .*)?/ matches when Jr. or II but not otherwise. Adding ? makes Jr. get absorbed 
+	# Try /([^,]+), ([^;]+)(, ((I+)|(Jr\.)))(; .*)?/ matches when Jr. or II but not otherwise. Adding ? makes Jr. get absorbed
   end
-  
+
   def initialize(values = {title: '', author: '', categories: '', blurb: '', key: '', stars: 0, ratings: 0})
     return if values.nil?
     if values.is_a? Hash
@@ -63,7 +63,7 @@ class Book < Hash
     end
 	post_initialize
   end
-  
+
   def add_category(category)
     @category_array << category
 	if self[:categories] > ''
@@ -72,13 +72,13 @@ class Book < Hash
 	  self[:categories] = category
     end
   end
-  
+
   def flatten_categories
     self[:categories] = self[:categories].to_a.join(', ')
 	self[:reading_time] = self[:reading_time].to_f
 	return self
   end
- 
+
 def post_initialize
     if self[:author] =~ /(.*);/
 	  self[:author] = $1
@@ -97,28 +97,28 @@ def post_initialize
     if blurb =~ /\. +([0-9]{4})\./
       self[:year] = $1
     end
-    if blurb =~ /commercial audiobook/i 
+    if blurb =~ /commercial audiobook/i
       self[:product] = "commercial audiobook"
-    end 
+    end
 	self[:language] = 'English'
 	if blurb =~ /\. ([A-Z]\w+) language\./
 	  self[:language] = $1
 	end
 	self[:categories].sub!(/A production of.*\.,? */, '') # This sometimes pollutes the categories string
 	@category_array = (self[:categories] || '').split('; ')
-	@category_array.each do |category| 
+	@category_array.each do |category|
 		if category =~ /(.*) language/i
 		  self[:language] = $1
 		end
 	end
     self[:date_added] = Date::today
 end
-  
+
   def get_rating # look up rating on Goodreads or other service
 	return if (self[:goodreads_title] || '').downcase == 'ignore'
 	rating = goodreadsRating(self) || {}
-	if rating[:match]  # no match, don't change 
-		self[:stars_date] = Date::today
+    self[:stars_date] = Date::today  # set date we last checked ratings
+	if rating[:match]  # no match, don't change
 		self[:stars] = rating[:stars]
 		self[:ratings] = rating[:count]
 		self[:goodreads_title] = rating[:goodreads_title]
@@ -131,7 +131,7 @@ end
 	    self[:goodreads_title] = 'no match xxx'
 	end
   end
-  
+
 end
 
 # configure selenium for chrome
@@ -155,4 +155,3 @@ end
 # t = test_entries[0]
 # b = Book.new t
 # binding.pry
-

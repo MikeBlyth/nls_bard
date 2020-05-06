@@ -46,3 +46,9 @@ SELECT id, key, books.title, books.author FROM WISHLIST JOIN BOOKS on
    BOOKS.TITLE ILIKE Concat('%',wishlist.title,'%') AND
    BOOKS.AUTHOR ILIKE Concat('%',wishlist.author,'%')
 
+# Fix/Change a Goodreads_author -- naturally check that the target set is narrow enough
+UPDATE BOOKS
+	SET GOODREADS_AUTHOR = 'Naguib Mahfouz'
+	WHERE author LIKE '%, Naj%' 
+	
+	

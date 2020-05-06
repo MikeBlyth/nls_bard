@@ -375,6 +375,7 @@ def update_ratings
   books_to_update = @mybooks.books_with_desired_category.order(:key)  ### Update books of desired categories
   books_to_update.each do |bookhash|
 	i = i+1
+	next if i < 17000
 	book = Book.new(bookhash)
 	# Time to update rating?
 	if rating_update_needed(book)
@@ -383,10 +384,11 @@ def update_ratings
 	  book.get_rating
 	  stars = book[:stars]
 	  ratings = book[:ratings]|| 0
-	  if ratings > old_ratings then
-		  puts "#{i}: (#{old_stars}, #{old_ratings}) -> (#{stars}, #{ratings}) | #{book[:key]} | #{book[:title]}"
-		  @mybooks.update_book_rating(book)
+	  if ratings < old_ratings then
+		  puts "** Warning: number of ratings has decreased on #{book[:key]} #{book[:title]}"
 	  end
+	  puts "#{i}: (#{old_stars}, #{old_ratings}) -> (#{stars}, #{ratings}) | #{book[:key]} | #{book[:title]}"
+	  @mybooks.update_book_rating(book)
 	  sleep(1)
 	  sleep(10) if i %20 == 0  # pause after every 20th update to make Goodreads happy
 	end
@@ -430,7 +432,7 @@ def handle_command(command_line)
 	filters[:title] = options.title
 	filters[:author] = options.author
 	filters[:blurb] = options.blurb
-	filters[:key] = options.key
+	filters[:key] = options.key.upcase
 	puts 'filters loaded' if $debug
 	binding.pry if $debug
 
@@ -467,8 +469,8 @@ def handle_command(command_line)
 	end
 
 	if options.mark != []
+		options.mark.map! {|key| key.upcase}
 		options.mark.each do |key|
-			puts "#{key} will be marked"
 		end
 		selected = @books.where(:key=>options.mark)
 		selected.update(bookmarked: true)
@@ -477,6 +479,7 @@ def handle_command(command_line)
 	end
 
 	if options.unmark != []
+		options.unmark.map! {|key| key.upcase}
 		puts "Removing bookmark from:"
 		if options.unmark.first.downcase == 'all' then
 			selected = @books.where(:bookmarked=>true)
