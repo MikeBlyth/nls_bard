@@ -50,5 +50,8 @@ SELECT id, key, books.title, books.author FROM WISHLIST JOIN BOOKS on
 UPDATE BOOKS
 	SET GOODREADS_AUTHOR = 'Naguib Mahfouz'
 	WHERE author LIKE '%, Naj%' 
-	
+
+UPDATE BOOKS
+	SET RATINGS = 2909
+	WHERE KEY = 'DB34468' 	
 	

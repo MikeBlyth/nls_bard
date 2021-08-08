@@ -1,5 +1,8 @@
 def name_parse(name)
-  name = name.split('; ')[0]
+  name = name.strip.split('; ')[0]
+  if name =~ /^(\w*)$/  # Single word
+      parsed = {last: name, first: '', middle: ''}
+  end
   if name =~ /(.*), +(.*\.?) +(.*)/    # Last, First Middle
     parsed = {last: $1, first: $2, middle: $3}
     return parsed
@@ -23,12 +26,12 @@ def name_parse(name)
 end
 
 def name_parse_test
-	tests = ['David Thoreau','Patton, General H. W.', 'Aristotle', "O'Reilly, J. Paxton", "Schellhas, Bob; Gingrich, Newt; Gillespie, Ed; Armey, Richard K.",
+	tests = ['MHA ', 'David Thoreau','Patton, General H. W.', 'Aristotle', "O'Reilly, J. Paxton", "Schellhas, Bob; Gingrich, Newt; Gillespie, Ed; Armey, Richard K.",
 	   "Saint-Exupéry, Antoine de", "García Márquez, Gabriel", "Beth-Home, Sara", "Castañeda, Jorge G.", 'D. L. Eisenhower', 'Lyndon B. Johnson', "Meriç, Nezihe"]
-	   
+
 	tests.each do |t|
 	  p = name_parse(t)
-	  puts "#{t} => #{p[:first]}|#{p[:middle]}|#{p[:last]}"
+	  puts "#{t} => #{p[:first]}|#{p[:middle]}|#{p[:last]}|"
 	end
 end
 
