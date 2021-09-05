@@ -46,6 +46,23 @@ def get_page(letter,page, base_url)
   return @nls_driver.page_source
 end
 
+# def process_page_old(page) # Process raw HTML and return array of plain text entries
+#   parsed = Nokogiri::HTML(page)
+#   lp = parsed.xpath("//a[contains(text(),'Last Page')]/@href")  # Find "last page" link
+#   if lp  # last page link found
+#     # lp will be URL something like "https://nlsbard.loc.gov:443/nlsbardprod/search/title/page/2/sort/s/local/0/srch/Q/"
+#     lp.text =~ /page\/([0-9]+)\//i
+#     @last_page = $1.to_i
+#   else # no last page link, so this is the only page for this letter
+#     @last_page = 1
+#   end
+#   books_noko = parsed.xpath("//span[@lang='EN']") # Array of Nokogiri objects
+#   books_noko.search('.//h2').remove  # These are Date headings
+#   books_text =  books_noko.map {|b| b.text}
+# #binding.pry
+#   return books_text
+# end
+
 def process_page(page) # Process raw HTML and return array of plain text entries
   parsed = Nokogiri::HTML(page)
   lp = parsed.xpath("//a[contains(text(),'Last Page')]/@href")  # Find "last page" link
@@ -56,7 +73,7 @@ def process_page(page) # Process raw HTML and return array of plain text entries
   else # no last page link, so this is the only page for this letter
     @last_page = 1
   end
-  books_noko = parsed.xpath("//span[@lang='EN']") # Array of Nokogiri objects
+  books_noko = parsed.xpath("//span[a][h4]") # Array of Nokogiri objects
   books_noko.search('.//h2').remove  # These are Date headings
   books_text =  books_noko.map {|b| b.text}
 #binding.pry
@@ -307,7 +324,6 @@ end
 def initialize_database
   @mybooks = BookDatabase.new
   @books = @mybooks.books
-
 end
 
 def initialize_nls_bard_chromium
