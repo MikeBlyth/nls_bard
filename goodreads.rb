@@ -185,7 +185,7 @@ def goodreadsRating(book)
 		 chrome_goodreads_page(title, author)
 	     rating_info = get_goodreads_info
 	   else
-         rating_info = {:goodreads_title => 'no match xxx', :match => false}
+         rating_info = {:goodreads_title => 'no rating xxx', :match => false}
        end
 	end
 	return rating_info

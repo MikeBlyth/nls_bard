@@ -1,7 +1,7 @@
 require 'selenium-webdriver'
 #****************************************************************************
 # If you get an error about chromeddriver being outdated or incompatible, then go to
-# https://chromedriver.chromium.org/downloads
+	# https://chromedriver.chromium.org/downloads
 # and download the version that matches the current version of Chrome. Hopefully there will
 # always be a compatible one!
 # Extract the file chromedriver.exe to D:\Program Files (x86)\chromedriver\
