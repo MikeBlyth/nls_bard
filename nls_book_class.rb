@@ -140,6 +140,8 @@ def init_chromium_driver
 	options.add_argument('--ignore-certificate-errors')
 	options.add_argument('--disable-popup-blocking')
 	options.add_argument('--disable-translate')
+	options.add_argument('--headless')
+	options.add_argument('--disable-gpu')
 	return Selenium::WebDriver.for :chrome, options: options
 end
 
