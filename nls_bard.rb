@@ -17,7 +17,7 @@ require 'shellwords' # turns string into command-line-like args
 require 'csv'
 require 'zip'
 require 'nameable'
-require 'readline'
+require 'reline'
 
 @book_number = 0
 
@@ -288,7 +288,6 @@ def download(key)
   initialize_nls_bard_chromium
   @nls_driver.navigate.to(download_url)
   book = @mybooks.get_book(key)
-  binding.pry if $debug
   return unless book
 
   @books.filter(key: book[:key]).update(has_read: true, date_downloaded: Date.today) # should move to nls_bard_sequel
@@ -519,7 +518,7 @@ end
 @logged_in = false
 initialize_database
 args = ARGV
-Reline::History.push(args.join(' '))
+Reline::HISTORY << (args.join(' '))
 
 while args != []
   handle_command args

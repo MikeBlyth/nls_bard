@@ -8,17 +8,21 @@ def double_quote(title)
 end
 
 def goodreads_url(title, author)
-  author_url = URI.encode(author.strip)
-  title_url = URI.encode(title.strip)
-  title_url = URI.encode(double_quote(title.strip)) # Experimental! Helps get exact match?
+  author_url = CGI.escape(author.strip)
+  title_url = CGI.escape(title.strip)
+  title_url = CGI.escape(double_quote(title.strip)) # Experimental! Helps get exact match?
   "https://www.goodreads.com/search?q=#{title_url}+#{author_url}"
 end
 
 def get_goodreads_page(title, author)
-  #   puts "  -- trying #{title} by <#{author}>"
   request_url = goodreads_url(title, author)
-  page = HTTParty.get(request_url)
-  Nokogiri::HTML(page)
+  response = HTTParty.get(request_url)
+
+  if response.body.nil? || response.body.empty?
+    nil
+  else
+    Nokogiri::HTML(response.body)
+  end
 end
 
 def chrome_goodreads_page(title, author)
@@ -122,7 +126,7 @@ def goodreadsRating(book)
   author_array = author_strings(author)
   author_last_name = name_parse(author)[:last]
   title_array = title_strings(title)
-  title_url = URI.encode(title.strip)
+  title_url = CGI.escape(title.strip)
   not_found = true
   while (author_array.count > 0) && not_found # Keep using smaller chunks of author's name until a match is found
     author_try = author_array.shift
