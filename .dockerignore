@@ -1,0 +1,9 @@
+# .dockerignore
+.git
+.gitignore
+*.psd
+.env
+*.7z
+*.zip
+*.log
+spec/*

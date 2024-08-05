@@ -1,0 +1,29 @@
+version: '3'
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_PASSWORD: asendulf53
+      POSTGRES_DB: nlsbard
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db_dump:/db_dump
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://mike:asendulf53@db/nlsbard
+    volumes:
+      - .:/app
+    ports:
+      - "3000:3000"
+    # Add this to keep the container running
+    tty: true
+    stdin_open: true
+
+volumes:
+  postgres_data:
