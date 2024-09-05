@@ -8,8 +8,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db_dump:/db_dump
-    ports:
-      - "5432:5432"
+#    ports:   # Enable this to allow access to DB from outside docker on 5433
+#      - "5433:5432"
 
   app:
     build: .
@@ -22,8 +22,8 @@ services:
     ports:
       - "3000:3000"
     # Add this to keep the container running
-    tty: true
-    stdin_open: true
-
+#    tty: true
+#    stdin_open: true
+    command: tail -f /dev/null
 volumes:
   postgres_data:

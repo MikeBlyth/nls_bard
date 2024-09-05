@@ -19,4 +19,5 @@ RUN mkdir -p /home/chrome/.cache/selenium && chown -R chrome:chrome /home/chrome
 USER chrome
 
 # We're not starting the app automatically anymore
-CMD ["/bin/bash"]
+#CMD ["/bin/bash"]
+CMD ["ruby nls_bard.rb -h"]

@@ -1,0 +1,14 @@
+#!/bin/bash
+# This is here just for reference and to save in git. The actually executable is in /usr/local/bin
+# Default arguments if none are provided
+DEFAULT_ARGS="-f -t 'x12xxx'"
+
+# Check if arguments are provided
+if [ $# -eq 0 ]; then
+    ARGS="$DEFAULT_ARGS"
+else
+    ARGS="$@"
+fi
+
+# Run the docker-compose command with the appropriate arguments
+docker-compose run --rm app ruby nls_bard.rb $ARGS

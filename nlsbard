@@ -1,0 +1,1 @@
+ruby /app/nls_bard.rb "$@"
