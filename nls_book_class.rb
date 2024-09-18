@@ -1,4 +1,3 @@
-require 'pry'
 require 'date'
 require 'word_wrap'
 require 'colorize'

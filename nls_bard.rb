@@ -1,3 +1,4 @@
+require 'bundler/setup'
 require 'selenium-webdriver'
 #****************************************************************************
 # If you get an error about chromeddriver being outdated or incompatible, then go to
@@ -9,7 +10,6 @@ require 'selenium-webdriver'
 require 'nokogiri'
 require 'httparty'
 require 'date'
-require 'pry'
 require './goodreads.rb'  # Allows us to access the ratings on Goodreads
 require './nls_bard_sequel.rb' # interface to database
 require './nls_book_class.rb'
@@ -17,7 +17,6 @@ require './nls_bard_command_line_options.rb'
 require 'shellwords'  # turns string into command-line-like args
 require 'csv'
 require 'zip'
-require 'byebug'
 require 'nameable'
 require 'readline'
 
@@ -46,24 +45,8 @@ def get_page(letter,page, base_url)
   return @nls_driver.page_source
 end
 
-# def process_page_old(page) # Process raw HTML and return array of plain text entries
-#   parsed = Nokogiri::HTML(page)
-#   lp = parsed.xpath("//a[contains(text(),'Last Page')]/@href")  # Find "last page" link
-#   if lp  # last page link found
-#     # lp will be URL something like "https://nlsbard.loc.gov:443/nlsbardprod/search/title/page/2/sort/s/local/0/srch/Q/"
-#     lp.text =~ /page\/([0-9]+)\//i
-#     @last_page = $1.to_i
-#   else # no last page link, so this is the only page for this letter
-#     @last_page = 1
-#   end
-#   books_noko = parsed.xpath("//span[@lang='EN']") # Array of Nokogiri objects
-#   books_noko.search('.//h2').remove  # These are Date headings
-#   books_text =  books_noko.map {|b| b.text}
-# #binding.pry
-#   return books_text
-# end
-
-def process_page(page) # Process raw HTML and return array of plain text entries
+# Process raw HTML and return array of plain text entries
+def process_page(page)
   parsed = Nokogiri::HTML(page)
   lp = parsed.xpath("//a[contains(text(),'Last Page')]/@href")  # Find "last page" link
   if lp  # last page link found
@@ -76,7 +59,6 @@ def process_page(page) # Process raw HTML and return array of plain text entries
   books_noko = parsed.xpath("//span[a][h4]") # Array of Nokogiri objects
   books_noko.search('.//h2').remove  # These are Date headings
   books_text =  books_noko.map {|b| b.text}
-#binding.pry
   return books_text
 end
 
@@ -86,7 +68,6 @@ def next_line(lines)
   while lines.first.strip == '' || lines.first.length < 3  ## Because there may be a funny, non-std blank that doesn't strip
     lines.shift
   end
-#  binding.pry
  return nil if lines == []
   nxt = lines.shift
   #puts ">" + nxt
@@ -100,7 +81,6 @@ def process_entry(entry) # Generate Book from an entry
   while lines.last == '' # remove trailing blank lines
     lines.pop
   end
- # binding.pry
   # TITLE
   next_line(lines) =~ /(.*)\s+(DB\w+)/  # Book title should be of form "Title DBxxxx"
   return nil unless $1   # doesn't match format for a book, ignore it
@@ -111,7 +91,6 @@ def process_entry(entry) # Generate Book from an entry
  # binding.pry
   # AUTHOR
   book[:author] = next_line(lines).unicode_normalize  # This should be only the author(s)
-#  byebug if book[:author] =~ /O\'/
   if book[:author] =~ /^([\w,\.\-\' ]*)/ # Eliminate 2nd authors, parentheticals, etc.
     book[:author] = $1
   end
@@ -329,8 +308,7 @@ end
 def initialize_nls_bard_chromium
   return if @nls_driver
   @nls_driver = init_chromium_driver # sets up @nls_driver as the chromium driver for NLS BARD)
-  byebug if @nls_driver.nil?
-  login # (to NLS BARD, leaves us at the home page)
+ login # (to NLS BARD, leaves us at the home page)
 
 end
 
@@ -376,8 +354,6 @@ def rating_update_needed(book) # For now, this is adjusted by changing the code!
 #  xtitle = book[:title] || ''
 #  gtitle = book[:goodreads_title] || ''
 #  puts "#{book[:title]} | #{book[:goodreads_title][0..20]} | #{n}"
-#  byebug if book[:key] == 'xxx'
-#  byebug if book[:goodreads_title] == 'no match xxx'
 #  return ( $manual_update && (book[:goodreads_title] == 'no match xxx')) # !!!! This lets us visit ONLY "no match" titles if on manual update
 #  return xtitle =~ /A prayer for the city/i  # Use this line to check only certain title
 # return (gtitle == 'no match xxx')  # Use this line only to update ALL records with "no match"
@@ -556,7 +532,7 @@ end
 @logged_in = false
 initialize_database
 args = ARGV
-Readline::History.push(args.join(' '))
+Reline::HISTORY << (args.join(' '))
 
 while (args != [])
    handle_command args

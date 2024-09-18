@@ -1,6 +1,5 @@
 require 'nokogiri'
 require 'httparty'
-require 'pry'
 #require 'namae'
 require './name_parse.rb'
 
@@ -9,9 +8,9 @@ def double_quote(title)
 end
 
 def goodreads_url(title, author)
-	author_url = URI.encode(author.strip)
-	title_url = URI.encode(title.strip)
-	title_url = URI.encode(double_quote(title.strip))  # Experimental! Helps get exact match?
+	author_url = CGI.escape(author.strip)
+	title_url = CGI.escape(title.strip)
+	title_url = CGI.escape(double_quote(title.strip))  # Experimental! Helps get exact match?
 	full_url =  "https://www.goodreads.com/search?q=#{title_url}+#{author_url}"
 	return full_url
 end
@@ -19,15 +18,19 @@ end
 def get_goodreads_page(title, author)
  #   puts "  -- trying #{title} by <#{author}>"
 	request_url = goodreads_url(title, author)
-	page = HTTParty.get(request_url)
-	return Nokogiri::HTML(page)
+  response = HTTParty.get(request_url)
+
+  if response.body.nil? || response.body.empty?
+    nil
+  else
+    Nokogiri::HTML(response.body)
+  end
 end
 
 def chrome_goodreads_page(title, author)
-byebug
-    @goodreads_driver = @goodreads_driver || init_chromium_driver # set up chrome instance if it's not open
+	@goodreads_driver = @goodreads_driver || init_chromium_driver # set up chrome instance if it's not open
 	request_url = goodreads_url(title, author)
-    @goodreads_driver.navigate.to request_url
+  @goodreads_driver.navigate.to request_url
 end
 
 
@@ -56,7 +59,6 @@ def author_strings(author)
 	parsed =  name_parse(author)
 	first = parsed[:first]
 	last = parsed[:last]
-	byebug if (last || '') == ''
 	middle = parsed[:middle]
 	search_strings = []
 	if middle > ''
@@ -139,9 +141,8 @@ def goodreadsRating(book)
 	return nil if (title == '') || (author == '')
 	author_array = author_strings(author)
     author_last_name = name_parse(author)[:last]
-#	byebug if book[:key] == 'DB46708'
 	title_array = title_strings(title)
-	title_url = URI.encode(title.strip)
+	title_url = CGI.escape(title.strip)
 	not_found = true
 	while (author_array.count > 0) && (not_found) # Keep using smaller chunks of author's name until a match is found
     	author_try = author_array.shift
@@ -157,7 +158,6 @@ def goodreadsRating(book)
     end
 	if not_found
 	  puts "No Goodreads match found for #{book[:key]} #{title} by #{author_orig}."
-#	  byebug
 	  if $manual_update
 		chrome_goodreads_page(title, author_last_name)
 		return get_goodreads_info
@@ -168,13 +168,10 @@ def goodreadsRating(book)
 
 #	ratings = parsed_page.xpath("//span[@class='minirating']")
 #    title_xpath = title.downcase.gsub(/\'/,'$')
-#	byebug if author_last_name.nil?
 #	author_xpath = author_last_name.downcase.gsub(/\'/,'$')
 #    xpath_expr = "//a[@class='bookTitle']/span[@itemprop='name']//text()[contains(translate(., \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\'\", 'abcdefghijklmnopqrstuvwxyz$'),'#{title_xpath}')]/ancestor::td/span[@itemprop='author']/div/a/span[contains(translate(., \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\'\", 'abcdefghijklmnopqrstuvwxyz$'),'#{author_xpath}')]/ancestor::td//span[@class='minirating'][text()]"
-	#byebug
-    ratings = search_goodreads_entries(parsed_page,title, author_last_name)
+   ratings = search_goodreads_entries(parsed_page,title, author_last_name)
 	if ratings
-#byebug if ratings.count > 1
 		max_rating = get_stars(ratings) # Get the stars and count for the entry with the highest number of ratings (count)
 		stars = max_rating[:stars]
 		count = max_rating[:count]

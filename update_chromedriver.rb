@@ -4,14 +4,12 @@
 require 'net/http'
 require 'open-uri'
 require 'zip'
-require 'byebug'
 
 # Get the HTML from the webpage
 url = 'https://googlechromelabs.github.io/chrome-for-testing/#stable'
 response = Net::HTTP.get_response(URI(url))
 
 # Check if the request was successful
-byebug
 if response.code != '200'
   raise "Error: Failed to fetch webpage. Response code: #{response.code}"
   exit 1
@@ -41,9 +39,9 @@ begin
     File.open(download_path, 'wb') do |file|
       file.write(f.read)
     end
-  end 
+  end
 rescue StandardError => e
-  raise "Error: Failed to download chromedriver.zip: #{e.message} at 
+  raise "Error: Failed to download chromedriver.zip: #{e.message} at
 	#{download_url}"
   exit 1
 end
