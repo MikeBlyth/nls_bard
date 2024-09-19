@@ -133,17 +133,6 @@ end
 
 end
 
-# configure selenium for chrome
-def init_chromium_driver
-	options = Selenium::WebDriver::Chrome::Options.new
-	options.add_argument('--ignore-certificate-errors')
-	options.add_argument('--disable-popup-blocking')
-	options.add_argument('--disable-translate')
-	options.add_argument('--headless')
-	options.add_argument('--disable-gpu')
-	return Selenium::WebDriver.for :chrome, options: options
-end
-
 # test_raw_entries = ["\n\n\n\"A convention of delegates\": the creation of the Constitution DB26864\nHauptly, Denis J. \nReading time: 3 hours, 12 minutes. \n\nRead by Ronald B Meyer. \n\n\nGovernment and Politics\n\nDescribes the creation of the U.S. Constitution through anecdotes and profiles of Founding Fathers Washington, Madison, Hamilton, Franklin, Jay, Randolph, Paterson, and Sherman. For grades 5-8.\nDownload \"A convention of delegates\": the creation of the Constitution \n\n\n\n",
 # "\n\n\n\"A nation is dying\": Afghanistan under the Soviets, 1979-87 DB30498\nLaber, Jeri; Rubin, Barnett R. \nReading time: 7 hours, 43 minutes. \n\nRead by Ken Kliban. \n\n\nWorld History and Affairs\n\nMore than five million people have fled to Iran and Pakistan since the beginning of the Soviet-Afghan war. Using interviews with hundreds of these refugees, the authors paint a picture of a staggering number of human rights violations against the citizens of Afghanistan. Violence. 2015.\nDownload \"A nation is dying\": Afghanistan under the Soviets, 1979-87 \n\n\n\n",
 # "\n\n\n\"A revolting transaction\" DB21578\nConrad, Barnaby. \nReading time: 7 hours, 4 minutes. \n\nRead by Robert Stattel. \n\n\nTrue Crime\n\nUnearthing some mysterious letters in his mother's trunks, the author becomes immersed in a century-old murder investigation. The victim was his great-grandmother, a wealthy Denver widow who was mailed some poisoned whiskey from the East. A true crime study with a re-creation of the Victorian era.\nDownload \"A revolting transaction\"\n\n\n\n",

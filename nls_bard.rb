@@ -20,6 +20,8 @@ require 'zip'
 require 'nameable'
 require 'readline'
 
+at_exit { cleanup }
+
 @book_number = 0
 
 def login
@@ -292,7 +294,7 @@ def download(key)
 	download_url = "https://nlsbard.loc.gov/nlsbardprod/download/book/srch/#{key}"#
 	initialize_nls_bard_chromium
 	@nls_driver.navigate.to(download_url)
-    book = @mybooks.get_book(key)
+  book = @mybooks.get_book(key)
 	binding.pry if $debug
 	if book
 	  @books.filter(key: book[:key]).update(has_read: true, date_downloaded: Date::today) # should move to nls_bard_sequel
@@ -307,40 +309,83 @@ end
 
 def initialize_nls_bard_chromium
   return if @nls_driver
-  @nls_driver = init_chromium_driver # sets up @nls_driver as the chromium driver for NLS BARD)
- login # (to NLS BARD, leaves us at the home page)
+  @nls_driver = create_chrome_driver
+  login unless @logged_in
+end
 
+# configure selenium for chrome
+def create_chrome_driver
+	require 'selenium-webdriver'
+
+	chrome_path = 'C:\ChromeForTesting\chrome.exe'
+	chromedriver_path = 'C:\ChromeForTesting\chromedriver.exe'
+
+	puts "Chrome path: #{chrome_path}"
+	puts "ChromeDriver path: #{chromedriver_path}"
+
+	service = Selenium::WebDriver::Chrome::Service.new(path: chromedriver_path)
+
+	options = Selenium::WebDriver::Chrome::Options.new
+	options.add_argument('--no-sandbox')
+	options.add_argument('--disable-dev-shm-usage')
+	options.add_argument('--disable-gpu')
+	options.add_argument('--disable-extensions')
+	options.add_argument('--disable-software-rasterizer')
+	options.add_argument('--headless') # Try running in headless mode
+	options.binary = chrome_path
+
+	puts "Initializing WebDriver..."
+	begin
+		driver = Selenium::WebDriver.for :chrome, options: options, service: service
+		puts "Chrome launched successfully"
+		puts "Chrome version: #{driver.capabilities['browserVersion']}"
+		puts "ChromeDriver version: #{driver.capabilities['chrome']['chromedriverVersion']}"
+		driver.quit
+	rescue => e
+		puts "Error: #{e.message}"
+		puts "Error class: #{e.class}"
+		puts "Backtrace:"
+		puts e.backtrace
+	end
 end
 
 def wrap_up
-  @nls_driver.quit if @nls_driver
+  if @nls_driver
+    @nls_driver.quit
+    @nls_driver = nil
+  end
   @outfile.close if @outfile
   $stdout = @original_stdout
+end
+
+def cleanup
+  wrap_up
+  puts "Script terminated. Resources cleaned up."
 end
 
 def screen_output
   return $stdout == @original_stdout
 end
 
-def dump_table_yaml(filename,table)
-  out = File.open(filename,'w')
-  table.each do |item|
-    out.write YAML.dump(item)
-  end
-  rescue
-    puts "****** FILE ERROR DUMPING TO #{filename} *********"
-	raise
-  ensure
-    out.close unless out.nil?
-end
+# def dump_table_yaml(filename,table)
+#   out = File.open(filename,'w')
+#   table.each do |item|
+#     out.write YAML.dump(item)
+#   end
+#   rescue
+#     puts "****** FILE ERROR DUMPING TO #{filename} *********"
+# 	raise
+#   ensure
+#     out.close unless out.nil?
+# end
 
-def backup_tables
-  puts "Dumping database"
-  dump_table_yaml('books.yaml',@books)
-  dump_table_yaml('cats.yaml',@mybooks.cats)
-  dump_table_yaml('wish.yaml',@mybooks.wish)
-  dump_table_yaml('cat_book.yaml',@mybooks.cat_book)
-end
+# def backup_tables
+#   puts "Dumping database"
+#   dump_table_yaml('books.yaml',@books)
+#   dump_table_yaml('cats.yaml',@mybooks.cats)
+#   dump_table_yaml('wish.yaml',@mybooks.wish)
+#   dump_table_yaml('cat_book.yaml',@mybooks.cat_book)
+# end
 
 def rating_update_needed(book) # For now, this is adjusted by changing the code! ******************
   return false if book[:language] != 'English'
