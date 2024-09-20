@@ -39,6 +39,7 @@ def initialize_nls_bard_chromium
   options.add_argument('--enable-logging')
   options.add_argument('--v=1')
   options.add_argument('--enable-chrome-logs')
+#  options.add_preference('download.default_directory', '/downloads')
 
   # Enable performance logging
   options.add_option('goog:loggingPrefs', { performance: 'ALL', browser: 'ALL' })
@@ -86,12 +87,12 @@ def download(key)
     puts 'Download link clicked'
 
     # Search for the downloaded file with progress indication
-    if search_for_download(key)
-      puts 'Download confirmed.'
-      # Update your database or perform any other necessary actions here
-    else
-      puts 'Download not found. It may have failed or been interrupted.'
-    end
+    # if search_for_download(key)
+    #   puts 'Download confirmed.'
+    #   # Update your database or perform any other necessary actions here
+    # else
+    #   puts 'Download not found. It may have failed or been interrupted.'
+    # end
 
     puts "Final URL: #{@nls_driver.current_url}"
   rescue Selenium::WebDriver::Error::TimeoutError => e
@@ -158,27 +159,27 @@ def detect_potential_downloads
 end
 
 def search_for_download(key, max_wait_time = 300) # 5 minutes max wait time
-  puts 'Waiting for download to complete...'
   download_dir = '/home/chrome/Downloads'
   start_time = Time.now
 
   loop do
-    cmd = "find #{download_dir} -type f -name '*#{key}*' -print0 2>/dev/null | xargs -0 ls -lh 2>/dev/null"
+    # Use a more precise find command
+    cmd = "find #{download_dir} -type f -name '*#{key}*.zip' -not -name '*.crdownload' 2>/dev/null"
     result = `#{cmd}`
 
     unless result.strip.empty?
-      puts "\nDownload completed:"
-      puts result
+      # File found, return true silently
       return true
     end
 
+    # Print progress indicator
     print '+'
-    $stdout.flush # Ensure the + is printed immediately
+    $stdout.flush
 
     sleep 1 # Wait for 1 second before checking again
 
     if Time.now - start_time > max_wait_time
-      puts "\nDownload timed out after #{max_wait_time} seconds."
+      # Timeout reached, return false silently
       return false
     end
   end

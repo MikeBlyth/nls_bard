@@ -17,7 +17,6 @@ services:
       DATABASE_URL: postgres://mike:asendulf53@db/nlsbard
     volumes:
       - .:/app
-      - /mnt/d/users/mike/DownloadsD:/home/chrome/Downloads  # New volume for downloads
     ports:
       - "3000:3000"
     command: tail -f /dev/null
