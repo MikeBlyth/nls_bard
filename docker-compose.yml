@@ -17,6 +17,7 @@ services:
       DATABASE_URL: postgres://mike:asendulf53@db/nlsbard
     volumes:
       - .:/app
+      - ./downloads:/home/chrome/Downloads  # Add this line
     ports:
       - "3000:3000"
     command: tail -f /dev/null
