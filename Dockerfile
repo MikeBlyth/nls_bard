@@ -16,6 +16,7 @@ COPY . .
 
 RUN groupadd -r chrome && useradd -r -g chrome -G audio,video chrome
 RUN mkdir -p /home/chrome/.cache/selenium && chown -R chrome:chrome /home/chrome
+RUN mkdir -p /home/chrome/Downloads && chown -R chrome:chrome /home/chrome
 USER chrome
 
 # We're not starting the app automatically anymore
