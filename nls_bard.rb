@@ -1,4 +1,5 @@
 require 'selenium-webdriver'
+require 'bundler/setup'
 # ****************************************************************************
 # If you get an error about chromeddriver being outdated or incompatible, then go to
 # https://chromedriver.chromium.org/downloads
@@ -18,23 +19,53 @@ require 'csv'
 require 'zip'
 require 'nameable'
 require 'reline'
+require 'dotenv/load'
 
 @book_number = 0
 
-def login
-  @nls_driver.navigate.to 'https://nlsbard.loc.gov/nlsbardprod/login'
-  begin
-    @nls_driver.find_element(:name, 'loginid').send_keys 'mjblyth@gmail.com'
-    @nls_driver.find_element(:name, 'password').send_keys 'derbywarin5'
-    @nls_driver.find_element(:name, 'submit').click
-    @logged_in = true
-  rescue Selenium::WebDriver::Error::NoSuchElementError
-    puts 'Element not found in NLS BARD login page; may be changed or offline'
-    print 'Press enter to continue: '
-    gets
-    raise SystemExit
-  end
-end
+# def login
+#   @nls_driver.navigate.to 'https://nlsbard.loc.gov/nlsbardprod/login'
+#   begin
+#     @nls_driver.find_element(:name, 'loginid').send_keys 'mjblyth@gmail.com'
+#     @nls_driver.find_element(:name, 'password').send_keys 'derbywarin5'
+#     @nls_driver.find_element(:name, 'submit').click
+#     @logged_in = true
+#   rescue Selenium::WebDriver::Error::NoSuchElementError
+#     puts 'Element not found in NLS BARD login page; may be changed or offline'
+#     print 'Press enter to continue: '
+#     gets
+#     raise SystemExit
+#   end
+# end
+
+# def login
+#   return if @logged_in
+
+#   @nls_driver.navigate.to 'https://nlsbard.loc.gov/nlsbardprod/login'
+#   begin
+#     wait = Selenium::WebDriver::Wait.new(timeout: 10)
+
+#     username_field = wait.until { @nls_driver.find_element(name: 'loginid') }
+#     password_field = @nls_driver.find_element(name: 'password')
+#     submit_button = @nls_driver.find_element(name: 'submit')
+
+#     username_field.send_keys ENV['NLS_BARD_USERNAME']
+#     password_field.send_keys ENV['NLS_BARD_PASSWORD']
+#     submit_button.click
+
+#     # Wait for login to complete
+#     wait.until { @nls_driver.current_url != 'https://nlsbard.loc.gov/nlsbardprod/login' }
+
+#     @logged_in = true
+#     puts 'Login successful'
+#   rescue Selenium::WebDriver::Error::TimeoutError
+#     puts 'Login page timed out. The site might be slow or unavailable.'
+#   rescue Selenium::WebDriver::Error::NoSuchElementError
+#     puts 'Login form elements not found. The page structure might have changed.'
+#   rescue StandardError => e
+#     puts 'An error occurred during login: #{e.message}'
+#   end
+# end
 
 def get_page(letter, page, base_url)
   url = 'https://nlsbard.loc.gov/nlsbardprod/search/title/page/<page>/sort/s/srch/<letter>/local/0'
@@ -206,7 +237,7 @@ def iterate_update_pages(days)
           book[:has_read] = false
           @outfile.puts book.to_s # Optional
           @mybooks.insert_book(book)
-          book.display if @mybooks.is_interesting(book[:key])
+          book.display if true || @mybooks.is_interesting(book[:key])
         else
           @mybooks.update_book_categories(book)
           if book[:stars] == 0 # Just a one-time fix to get ratings of existing entries
@@ -283,27 +314,50 @@ def list_books_by_filter(filter)
   end
 end
 
-def download(key)
-  download_url = "https://nlsbard.loc.gov/nlsbardprod/download/book/srch/#{key}" #
-  initialize_nls_bard_chromium
-  @nls_driver.navigate.to(download_url)
-  book = @mybooks.get_book(key)
-  return unless book
+require_relative 'download_method'
 
-  @books.filter(key: book[:key]).update(has_read: true, date_downloaded: Date.today) # should move to nls_bard_sequel
-  @mybooks.wish_delete(key: book[:key]) # Remove from the wishlist -- not working!
+# def verify_download(response_headers, key, book_title)
+#   if response_headers.include?('Content-Disposition') && response_headers.include?('Content-Length')
+#     content_disposition = response_headers.match(/Content-Disposition: (.+)/i)&.[](1)
+#     content_length = response_headers.match(/Content-Length: (.+)/i)&.[](1)
+
+#     if content_disposition
+#       filename = content_disposition.match(/filename="(.+)"/i)&.[](1)
+#       extracted_key = filename&.match(/DB\d+/i)&.[](0)
+
+#       if extracted_key&.upcase == key.upcase
+#         puts "Successfully initiated download for book: #{book_title}"
+#         puts "Filename: #{filename}"
+#         puts "File size: #{content_length} bytes"
+#         puts "Verified book key: #{extracted_key}"
+#         update_book_records(key, book_title)
+#         return true
+#       else
+#         puts "Error: Mismatch or missing book key in Content-Disposition. Expected: #{key}, Found: #{extracted_key}"
+#       end
+#     else
+#       puts 'Error: Unable to extract filename from Content-Disposition header'
+#     end
+#   else
+#     puts 'Error: Expected headers (Content-Disposition or Content-Length) not found in the response.'
+#   end
+#   false
+# end
+
+def update_book_records(key, title)
+  book = @mybooks.get_book(key)
+  if book
+    @books.filter(key: book[:key]).update(has_read: true, date_downloaded: Date.today)
+    @mybooks.wish_delete(key: book[:key])
+    puts "Updated records for book: #{title} (#{key})"
+  else
+    puts "Book with key #{key} not found in the database. Consider adding: #{title}"
+  end
 end
 
 def initialize_database
   @mybooks = BookDatabase.new
   @books = @mybooks.books
-end
-
-def initialize_nls_bard_chromium
-  return if @nls_driver
-
-  @nls_driver = init_chromium_driver # sets up @nls_driver as the chromium driver for NLS BARD)
-  login # (to NLS BARD, leaves us at the home page)
 end
 
 def wrap_up
@@ -512,6 +566,13 @@ def normalize
 end
 
 # main program
+if ARGV[0] == 'test'
+  puts 'Starting download test...'
+  initialize_database
+  download('db35123')
+  puts 'Download test completed.'
+end
+
 @original_stdout = $stdout.clone
 # puts "Original = #{$stdout}"
 @nls_driver = nil
