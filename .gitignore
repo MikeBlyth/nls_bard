@@ -2,3 +2,5 @@
 .env
 *.txt
 *.sqlc
+*.dot
+*.png

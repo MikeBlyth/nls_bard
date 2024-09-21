@@ -20,7 +20,7 @@ services:
       - /mnt/d/users/mike/downloadsd:/home/chrome/Downloads  # Updated this line
     ports:
       - "3000:3000"
-    command: tail -f /dev/null
+    command: tail -f /dev/null  # This will keep the container running after app ends
 
 volumes:
   postgres_data:

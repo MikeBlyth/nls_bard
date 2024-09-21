@@ -1,3 +1,3 @@
-docker-compose down
+docker-compose down --remove-orphans
 docker-compose up --build -d
-docker-compose exec app /bin/bash
+# docker-compose exec app /bin/bash

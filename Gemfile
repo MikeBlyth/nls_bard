@@ -18,6 +18,8 @@ gem 'ostruct'
 gem 'pg'
 gem 'pp'
 gem 'reline'
+# gem 'rexml', '~> 3.3.7'
+gem 'rexml', '~> 3.3', '>= 3.2.5'
 gem 'selenium-webdriver'
 gem 'sequel'
 gem 'shellwords' # turns string into command-line-like args
