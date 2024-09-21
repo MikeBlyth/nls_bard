@@ -185,4 +185,44 @@ class BookDatabase
       insert_cat_book(category, newbook[:key])
     end
   end
+
+  def dump_database(output_file = '/app/db_dump/database_dump.sql')
+    db_name = @DB.opts[:database]
+    host = @DB.opts[:host]
+    user = @DB.opts[:user]
+    password = @DB.opts[:password]
+
+    # Ensure the output directory exists
+    FileUtils.mkdir_p(File.dirname(output_file))
+
+    # Construct the pg_dump command
+    cmd = [
+      "PGPASSWORD='#{password}'",
+      'pg_dump',
+      "-h #{host}",
+      "-U #{user}",
+      "-d #{db_name}",
+      "-f #{output_file}"
+    ].join(' ')
+
+    # Execute the command
+    system(cmd)
+
+    if $?.success?
+      # Zip the SQL file
+      zip_file = "#{output_file}.zip"
+      Zip::File.open(zip_file, Zip::File::CREATE) do |zipfile|
+        zipfile.add(File.basename(output_file), output_file)
+      end
+
+      # Delete the original SQL file
+      File.delete(output_file)
+
+      puts "Database dumped and zipped successfully to #{zip_file}"
+    else
+      puts "Failed to dump database. Exit status: #{$?.exitstatus}"
+    end
+  rescue StandardError => e
+    puts "Error during database dump or zip process: #{e.message}"
+  end
 end

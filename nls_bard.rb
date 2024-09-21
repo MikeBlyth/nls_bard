@@ -376,24 +376,27 @@ def screen_output
   $stdout == @original_stdout
 end
 
-def dump_table_yaml(filename, table)
-  out = File.open(filename, 'w')
-  table.each do |item|
-    out.write YAML.dump(item)
-  end
-rescue StandardError
-  puts "****** FILE ERROR DUMPING TO #{filename} *********"
-  raise
-ensure
-  out.close unless out.nil?
-end
+# def dump_table_yaml(filename, table)
+#   out = File.open(filename, 'w')
+#   table.each do |item|
+#     out.write YAML.dump(item)
+#   end
+# rescue StandardError
+#   puts "****** FILE ERROR DUMPING TO #{filename} *********"
+#   raise
+# ensure
+#   out.close unless out.nil?
+# end
 
 def backup_tables
   puts 'Dumping database'
-  dump_table_yaml('books.yaml', @books)
-  dump_table_yaml('cats.yaml', @mybooks.cats)
-  dump_table_yaml('wish.yaml', @mybooks.wish)
-  dump_table_yaml('cat_book.yaml', @mybooks.cat_book)
+  @mybooks.dump_database
+  exit
+
+  # dump_table_yaml('books.yaml', @books)
+  # dump_table_yaml('cats.yaml', @mybooks.cats)
+  # dump_table_yaml('wish.yaml', @mybooks.wish)
+  # dump_table_yaml('cat_book.yaml', @mybooks.cat_book)
 end
 
 def rating_update_needed(book) # For now, this is adjusted by changing the code! ******************

@@ -33,6 +33,7 @@ RUN gem install bundler && \
 COPY . .
 
 RUN groupadd -r chrome && useradd -r -g chrome -G audio,video chrome
+RUN mkdir -p /app/db_dump && chown -R $USER:$USER /app/db_dump
 RUN mkdir -p /home/chrome/.cache/selenium && chown -R chrome:chrome /home/chrome
 USER chrome
 
