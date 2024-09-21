@@ -8,6 +8,7 @@ require 'bundler/setup'
 # Extract the file chromedriver.exe to D:\Program Files (x86)\chromedriver\
 # ****************************************************************************1
 require 'nokogiri'
+require 'debug'
 require 'httparty'
 require 'date'
 require './goodreads' # Allows us to access the ratings on Goodreads
@@ -23,49 +24,84 @@ require 'dotenv/load'
 
 @book_number = 0
 
-# def login
-#   @nls_driver.navigate.to 'https://nlsbard.loc.gov/nlsbardprod/login'
-#   begin
-#     @nls_driver.find_element(:name, 'loginid').send_keys 'mjblyth@gmail.com'
-#     @nls_driver.find_element(:name, 'password').send_keys 'derbywarin5'
-#     @nls_driver.find_element(:name, 'submit').click
-#     @logged_in = true
-#   rescue Selenium::WebDriver::Error::NoSuchElementError
-#     puts 'Element not found in NLS BARD login page; may be changed or offline'
-#     print 'Press enter to continue: '
-#     gets
-#     raise SystemExit
-#   end
-# end
+def initialize_nls_bard_chromium
+  return if @nls_driver
 
-# def login
-#   return if @logged_in
+  options = Selenium::WebDriver::Chrome::Options.new
+  options.add_argument('--headless')
+  options.add_argument('--no-sandbox')
+  options.add_argument('--disable-dev-shm-usage')
+  options.add_argument('--enable-logging')
+  options.add_argument('--v=1')
+  options.add_argument('--enable-chrome-logs')
+#  options.add_preference('download.default_directory', '/downloads')
 
-#   @nls_driver.navigate.to 'https://nlsbard.loc.gov/nlsbardprod/login'
-#   begin
-#     wait = Selenium::WebDriver::Wait.new(timeout: 10)
+  # Enable performance logging
+  options.add_option('goog:loggingPrefs', { performance: 'ALL', browser: 'ALL' })
+  service = Selenium::WebDriver::Chrome::Service.new
+  @nls_driver = Selenium::WebDriver.for(:chrome, options:, service:)
+  login unless @logged_in
+end
 
-#     username_field = wait.until { @nls_driver.find_element(name: 'loginid') }
-#     password_field = @nls_driver.find_element(name: 'password')
-#     submit_button = @nls_driver.find_element(name: 'submit')
+def login
+  return if @logged_in
 
-#     username_field.send_keys ENV['NLS_BARD_USERNAME']
-#     password_field.send_keys ENV['NLS_BARD_PASSWORD']
-#     submit_button.click
+  @nls_driver.navigate.to 'https://nlsbard.loc.gov/nlsbardprod/login'
+  begin
+    wait = Selenium::WebDriver::Wait.new(timeout: 10)
 
-#     # Wait for login to complete
-#     wait.until { @nls_driver.current_url != 'https://nlsbard.loc.gov/nlsbardprod/login' }
+    username_field = wait.until { @nls_driver.find_element(name: 'loginid') }
+    password_field = @nls_driver.find_element(name: 'password')
+    submit_button = @nls_driver.find_element(name: 'submit')
 
-#     @logged_in = true
-#     puts 'Login successful'
-#   rescue Selenium::WebDriver::Error::TimeoutError
-#     puts 'Login page timed out. The site might be slow or unavailable.'
-#   rescue Selenium::WebDriver::Error::NoSuchElementError
-#     puts 'Login form elements not found. The page structure might have changed.'
-#   rescue StandardError => e
-#     puts 'An error occurred during login: #{e.message}'
-#   end
-# end
+    username_field.send_keys ENV['NLS_BARD_USERNAME']
+    password_field.send_keys ENV['NLS_BARD_PASSWORD']
+    submit_button.click
+
+    # Wait for login to complete
+    wait.until { @nls_driver.current_url != 'https://nlsbard.loc.gov/nlsbardprod/login' }
+
+    @logged_in = true
+  rescue Selenium::WebDriver::Error::TimeoutError
+    puts 'Login page timed out. The site might be slow or unavailable.'
+  rescue Selenium::WebDriver::Error::NoSuchElementError
+    puts 'Login form elements not found. The page structure might have changed.'
+  rescue StandardError => e
+    puts 'An error occurred during login: #{e.message}'
+  end
+end
+
+def download(key)
+  initialize_nls_bard_chromium
+  begin
+    book_url = "https://nlsbard.loc.gov/nlsbardprod/download/detail/srch/#{key}"
+    @nls_driver.navigate.to book_url
+
+    wait = Selenium::WebDriver::Wait.new(timeout: 15)
+    download_link = wait.until do
+      @nls_driver.find_element(:xpath,
+                               "//a[starts-with(@href, 'https://nlsbard.loc.gov/nlsbardprod/download/book/srch/') and contains(text(), 'Download')]")
+    end
+
+    book_title = begin
+      download_link.find_element(:xpath, './/span').text
+    rescue StandardError => e
+      puts "Error getting book title: #{e.message}"
+      'Unknown Title'
+    end
+
+    download_link.click
+    puts "Be sure to wait for download to complete before exiting app."
+  rescue Selenium::WebDriver::Error::TimeoutError => e
+    puts "Timeout error: #{e.message}"
+    puts "Current URL at timeout: #{@nls_driver.current_url}"
+  rescue Selenium::WebDriver::Error::NoSuchElementError => e
+    puts "Element not found error: #{e.message}"
+  rescue StandardError => e
+    puts "An unexpected error occurred: #{e.message}"
+    puts e.backtrace.join("\n")
+  end
+end
 
 def get_page(letter, page, base_url)
   url = 'https://nlsbard.loc.gov/nlsbardprod/search/title/page/<page>/sort/s/srch/<letter>/local/0'
@@ -314,36 +350,6 @@ def list_books_by_filter(filter)
   end
 end
 
-require_relative 'download_method'
-
-# def verify_download(response_headers, key, book_title)
-#   if response_headers.include?('Content-Disposition') && response_headers.include?('Content-Length')
-#     content_disposition = response_headers.match(/Content-Disposition: (.+)/i)&.[](1)
-#     content_length = response_headers.match(/Content-Length: (.+)/i)&.[](1)
-
-#     if content_disposition
-#       filename = content_disposition.match(/filename="(.+)"/i)&.[](1)
-#       extracted_key = filename&.match(/DB\d+/i)&.[](0)
-
-#       if extracted_key&.upcase == key.upcase
-#         puts "Successfully initiated download for book: #{book_title}"
-#         puts "Filename: #{filename}"
-#         puts "File size: #{content_length} bytes"
-#         puts "Verified book key: #{extracted_key}"
-#         update_book_records(key, book_title)
-#         return true
-#       else
-#         puts "Error: Mismatch or missing book key in Content-Disposition. Expected: #{key}, Found: #{extracted_key}"
-#       end
-#     else
-#       puts 'Error: Unable to extract filename from Content-Disposition header'
-#     end
-#   else
-#     puts 'Error: Expected headers (Content-Disposition or Content-Length) not found in the response.'
-#   end
-#   false
-# end
-
 def update_book_records(key, title)
   book = @mybooks.get_book(key)
   if book
@@ -582,24 +588,15 @@ args = ARGV
 Reline::HISTORY << (args.join(' '))
 
 while args != []
+  downloading = args.include? '-d'
   handle_command args
+  break if args.include?('exit') and !downloading
   puts
   puts "Enter command or 'quit'"
   #   command_line = gets.chomp
   command_line = Reline.readline('> ', true)
   args = command_line.shellsplit
-  exit if args == [] || args[0] =~ /(exit)|(end)|(quit)/i
+  break if args == [] || args[0] =~ /(exit)|(end)|(quit)/i
 end
 
 wrap_up
-
-# read_all # Read sorted-by-title-a-z all entries
-# read_updates(30)
-# update_years
-
-# Log in
-# auth = {:username=>"mjblyth@gmail.com", :password=>"derbywarin5", :loginid = "mjblyth@gmail.com"}
-# url = "https://nlsbard.loc.gov:443/nlsbardprod/login/mainpage/NLS"
-# page = HTTParty.get(url, :basic_auth=>auth)
-#
-# https://nlsbard.loc.gov/nlsbardprod/search/title/page/1/sort/s/srch/A/local/0
