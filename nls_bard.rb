@@ -8,7 +8,7 @@ require 'bundler/setup'
 # Extract the file chromedriver.exe to D:\Program Files (x86)\chromedriver\
 # ****************************************************************************1
 require 'nokogiri'
-require 'debug'
+# require 'debug'
 require 'httparty'
 require 'date'
 require './goodreads' # Allows us to access the ratings on Goodreads
