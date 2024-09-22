@@ -4,3 +4,4 @@
 *.sqlc
 *.dot
 *.png
+*.backup

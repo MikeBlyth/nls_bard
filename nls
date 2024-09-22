@@ -1,5 +1,7 @@
+# Copy this file to /usr/local/bin
+
 #!/bin/bash
-# This is here just for reference and to save in git. The actually executable is in /usr/local/bin
+
 # Default arguments if none are provided
 DEFAULT_ARGS="-f -t 'x12xxx'"
 
@@ -11,4 +13,5 @@ else
 fi
 
 # Run the docker-compose command with the appropriate arguments
+/mnt/d/users/mike/nls_bard
 docker-compose run --rm app ruby nls_bard.rb $ARGS

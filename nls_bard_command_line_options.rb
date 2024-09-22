@@ -28,8 +28,8 @@ class Optparse
 	options.backup = false
 	options.update_ratings = false
 	options.manual_update = false
-	
-	
+
+
     options.verbose = false
 
     opt_parser = OptionParser.new do |opts|
@@ -42,7 +42,7 @@ class Optparse
       opts.on("-g", "--getnew N", Integer, "Update DB with books added in past N days") do |n|
         options.getnew = n
       end
-	  
+
 	  # Find
       opts.on("-f", "--find", "Find in database (use title, author, and/or blurb") do |f|
         options.find = true
@@ -79,7 +79,7 @@ class Optparse
       end
 
       # Download books
-      opts.on("--[no-]debug","Debug with pry") do |p|
+      opts.on("--[no-]debug","Debug (debug gem must be required, and debugger statements included)") do |p|
         options.debug = p
       end
 
@@ -88,16 +88,16 @@ class Optparse
 	    options.update_ratings = true
 	  end
 
-   	  # Use manual updating 
+   	  # Use manual updating
 	  opts.on("-m", "--manual_update","Get user input for non-matches") do |p|
 	    options.manual_update = true
 	  end
-	  
+
 	  # backup
       opts.on("-b", "--backup",
               "backup database to zip file") do |key|
         options.backup = true
-	  end	
+	  end
 
       opts.separator ""
       opts.separator "Filters:"
@@ -106,25 +106,25 @@ class Optparse
       opts.on("-t",	"--title TITLE",
               "search database for title (use quotes)") do |title|
         options.title << title
-	  end	
+	  end
 
 	  # author
       opts.on("-a","--author AUTHOR",
               "search database for author (use quotes)") do |author|
         options.author << author
-	  end	
+	  end
 
  	  # blurb
       opts.on("-b", "--blurb CONTAINING",
               "search database for blurb containing (use quotes)") do |contains|
         options.blurb << contains
-	  end	
+	  end
 
  	  # key
       opts.on("-k", "--key KEY",
               "specify book key (e.g. DB60197)") do |key|
         options.key << key
-	  end	
+	  end
 
       opts.separator ""
       opts.separator "Runtime options:"
@@ -135,7 +135,7 @@ class Optparse
 	  opts.on("-o", "--output FILE", "file for output") do |output|
 	    options.output = output
 	  end
-	  
+
       opts.on("-v", "--[no-]verbose", "Long descriptions") do |v|
         options.verbose = v
       end
@@ -158,7 +158,7 @@ end  # class OptparseExample
 #options = Optparse.parse(ARGV)
 # options_input =  ['--mark', 'DB1,DB2,DB3', '--find', 'Winds of War', '--output', 'temp.txt']
 # options = OptparseExample.parse(options_input)
-#pp options_input 
+#pp options_input
 #pp options
 #pp options.days, options.books
 #options = OptparseExample.parse(['-h'])

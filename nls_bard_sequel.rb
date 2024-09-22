@@ -59,7 +59,6 @@ class BookDatabase
                       .where { stars >= minimum_stars }
                      .where { ratings >= minimum_ratings }
                      .where(has_read: false)
-    #		binding.pry
     !cats.first.nil?
   end
 

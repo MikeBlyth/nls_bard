@@ -152,7 +152,6 @@ def process_entry(entry) # Generate Book from an entry
   book[:key] = Regexp.last_match(2) # The DBxxxx
   book[:title].sub!(%r{ */ *$}, '') # get rid of trailing slash in title
   book[:title].sub!(/\. *$/, '') # get rid of trailing period
-  # binding.pry
   # AUTHOR
   book[:author] = next_line(lines).unicode_normalize # This should be only the author(s)
   if book[:author] =~ /^([\w,.\-' ]*)/ # Eliminate 2nd authors, parentheticals, etc.
@@ -235,7 +234,6 @@ def iterate_pages(start_letter, start_num)
 
         book.get_rating
         @outfile.puts book.to_s
-        #	binding.pry if book[:key] == 'DBF02660'
         @mybooks.insert_book(book)
         puts "#{book[:stars]} (#{book[:ratings]}): #{book[:title]} <#{book[:author]}>"
         sleep 1
@@ -440,7 +438,6 @@ def update_ratings
     @mybooks.update_book_rating(book)
     sleep(1)
     sleep(10) if i % 20 == 0 # pause after every 20th update to make Goodreads happy
-    #	binding.pry
   end
 end
 
@@ -480,7 +477,6 @@ def handle_command(command_line)
   filters[:blurb] = options.blurb
   filters[:key] = options.key.upcase
   puts 'filters loaded' if $debug
-  binding.pry if $debug
 
   if options.getnew > 0
     puts "getting books added in past #{options.getnew} days"
@@ -553,7 +549,6 @@ def handle_command(command_line)
 
   update_ratings if options.update_ratings
 
-  binding.pry if $debug
 ensure
   $stdout = @original_stdout
 end
