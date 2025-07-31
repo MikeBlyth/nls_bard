@@ -13,6 +13,7 @@ require 'httparty'
 require 'date'
 require './goodreads' # Allows us to access the ratings on Goodreads
 require './nls_bard_sequel' # interface to database
+require_relative './bard_session_manager'
 require './nls_book_class'
 require './nls_bard_command_line_options'
 require 'shellwords' # turns string into command-line-like args
@@ -24,63 +25,16 @@ require 'dotenv/load'
 
 @book_number = 0
 
-def initialize_nls_bard_chromium
-  return if @nls_driver
-
-  options = Selenium::WebDriver::Chrome::Options.new
-  options.add_argument('--headless')
-  options.add_argument('--no-sandbox')
-  options.add_argument('--disable-dev-shm-usage')
-  options.add_argument('--enable-logging')
-  options.add_argument('--v=1')
-  options.add_argument('--enable-chrome-logs')
-#  options.add_preference('download.default_directory', '/downloads')
-
-  # Enable performance logging
-  options.add_option('goog:loggingPrefs', { performance: 'ALL', browser: 'ALL' })
-  service = Selenium::WebDriver::Chrome::Service.new
-  @nls_driver = Selenium::WebDriver.for(:chrome, options:, service:)
-  login unless @logged_in
-end
-
-def login
-  return if @logged_in
-
-  @nls_driver.navigate.to 'https://nlsbard.loc.gov/nlsbardprod/login'
-  begin
-    wait = Selenium::WebDriver::Wait.new(timeout: 10)
-
-    username_field = wait.until { @nls_driver.find_element(name: 'username') }
-    password_field = @nls_driver.find_element(name: 'password')
-    submit_button = @nls_driver.find_element(name: 'login')
-
-    username_field.send_keys ENV['NLS_BARD_USERNAME']
-    password_field.send_keys ENV['NLS_BARD_PASSWORD']
-    submit_button.click
-
-    # Wait for login to complete
-    wait.until { @nls_driver.current_url != 'https://nlsbard.loc.gov/nlsbardprod/login' }
-
-    @logged_in = true
-  rescue Selenium::WebDriver::Error::TimeoutError
-    puts 'Login page timed out. The site might be slow or unavailable.'
-  rescue Selenium::WebDriver::Error::NoSuchElementError
-    puts 'Login form elements not found. The page structure might have changed.'
-  rescue StandardError => e
-    puts 'An error occurred during login: #{e.message}'
-  end
-end
-
 def download(key)
-  initialize_nls_bard_chromium
+  BardSessionManager.initialize_nls_bard_chromium
   begin
     book_url = "https://nlsbard.loc.gov/nlsbardprod/download/detail/srch/#{key}"
-    @nls_driver.navigate.to book_url
+    BardSessionManager.nls_driver.navigate.to book_url
 
     wait = Selenium::WebDriver::Wait.new(timeout: 15)
     download_link = wait.until do
-      @nls_driver.find_element(:xpath,
-                               "//a[starts-with(@href, 'https://nlsbard.loc.gov/nlsbardprod/download/book/srch/') and contains(text(), 'Download')]")
+      BardSessionManager.nls_driver.find_element(:xpath,
+                                                 "//a[starts-with(@href, 'https://nlsbard.loc.gov/nlsbardprod/download/book/srch/') and contains(text(), 'Download')]")
     end
 
     book_title = begin
@@ -91,10 +45,10 @@ def download(key)
     end
 
     download_link.click
-    puts "Be sure to wait for download to complete before exiting app."
+    puts 'Be sure to wait for download to complete before exiting app.'
   rescue Selenium::WebDriver::Error::TimeoutError => e
     puts "Timeout error: #{e.message}"
-    puts "Current URL at timeout: #{@nls_driver.current_url}"
+    puts "Current URL at timeout: #{BardSessionManager.nls_driver.current_url}"
   rescue Selenium::WebDriver::Error::NoSuchElementError => e
     puts "Element not found error: #{e.message}"
   rescue StandardError => e
@@ -106,8 +60,7 @@ end
 def get_page(letter, page, base_url)
   url = 'https://nlsbard.loc.gov/nlsbardprod/search/title/page/<page>/sort/s/srch/<letter>/local/0'
   url = base_url.sub(/<page>/, page.to_s).sub(/<letter>/, letter)
-  @nls_driver.navigate.to url
-  @nls_driver.page_source
+  BardSession
 end
 
 # Process raw HTML and return array of plain text entries
@@ -548,7 +501,6 @@ def handle_command(command_line)
   end
 
   update_ratings if options.update_ratings
-
 ensure
   $stdout = @original_stdout
 end
@@ -583,12 +535,13 @@ end
 @logged_in = false
 initialize_database
 args = ARGV
-Reline::HISTORY << (args.join(' '))
+Reline::HISTORY << args.join(' ')
 
 while args != []
   downloading = args.include? '-d'
   handle_command args
   break if args.include?('exit') and !downloading
+
   puts
   puts "Enter command or 'quit'"
   #   command_line = gets.chomp
