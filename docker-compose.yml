@@ -1,4 +1,3 @@
-version: '3'
 services:
   db:
     image: postgres:13
@@ -18,10 +17,12 @@ services:
       NLS_BARD_PASSWORD: ${NLS_BARD_PASSWORD}
     volumes:
       - .:/app
-      - /mnt/d/users/mike/downloadsd:/home/chrome/Downloads  # Updated this line
+      - ${WIN_DOWNLOADS_PATH}:/home/chrome/Downloads  # Updated this line
     ports:
       - "3000:3000"
     command: tail -f /dev/null  # This will keep the container running after app ends
 
 volumes:
   postgres_data:
+    name: nls_bard_postgres_data
+    external: true

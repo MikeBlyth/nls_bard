@@ -50,9 +50,9 @@ def login
   begin
     wait = Selenium::WebDriver::Wait.new(timeout: 10)
 
-    username_field = wait.until { @nls_driver.find_element(name: 'loginid') }
+    username_field = wait.until { @nls_driver.find_element(name: 'username') }
     password_field = @nls_driver.find_element(name: 'password')
-    submit_button = @nls_driver.find_element(name: 'submit')
+    submit_button = @nls_driver.find_element(name: 'login')
 
     username_field.send_keys ENV['NLS_BARD_USERNAME']
     password_field.send_keys ENV['NLS_BARD_PASSWORD']

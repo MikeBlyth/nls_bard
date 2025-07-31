@@ -23,6 +23,8 @@ RUN apt-get install -y \
 WORKDIR /app
 COPY Gemfile Gemfile.lock ./
 
+
+
 # Install bundler and gems with retry mechanism
 RUN gem install bundler && \
     for i in {1..3}; do \
@@ -43,15 +45,22 @@ COPY . .
 
 RUN groupadd -r chrome && useradd -r -g chrome -G audio,video chrome
 
-ENV GEM_HOME="/home/chrome/.gems"
-ENV PATH="/home/chrome/.gems/bin:$PATH"
-
-RUN mkdir -p /home/chrome/.gems && chown -R chrome:chrome /home/chrome/.gems
+# --- DEBUGGING START ---
+RUN echo "--- DEBUG: Permissions before chown /usr/local/bundle ---"
+RUN ls -la /usr/local/bundle
+RUN ls -la /usr/local/bundle/gems
+# --- DEBUGGING END ---
 
 # Change ownership of the global gem installation directory so 'chrome' can write to it
-# RUN chown -R chrome:chrome /usr/local/bundle # We're going to put gem directory in writeable location
+RUN chown -R chrome:chrome /usr/local/bundle
 
-       
+# --- DEBUGGING START ---
+RUN echo "--- DEBUG: Permissions AFTER chown /usr/local/bundle ---"
+RUN ls -la /usr/local/bundle
+RUN ls -la /usr/local/bundle/gems
+# --- DEBUGGING END ---
+
+    
 RUN mkdir -p /app/db_dump && chown -R chrome:chrome /app/db_dump
 RUN mkdir -p /home/chrome/.cache/selenium && chown -R chrome:chrome /home/chrome
 USER chrome

@@ -4,13 +4,13 @@ source 'https://rubygems.org'
 
 ruby '3.3.1'
 
-gem 'logger'
 gem 'colorize'
 gem 'csv'
 gem 'date'
 gem 'dotenv'
 gem 'fileutils'
 gem 'httparty'
+gem 'logger'
 gem 'nameable'
 gem 'nokogiri'
 gem 'optparse'
@@ -19,7 +19,8 @@ gem 'pg'
 gem 'pp'
 gem 'reline'
 # gem 'rexml', '~> 3.3.7'
-gem 'rexml', '~> 3.3', '>= 3.2.5'
+# gem 'rexml', '~> 3.3', '>= 3.2.5'
+gem 'rexml', '>= 3.2.5'
 gem 'selenium-webdriver'
 gem 'sequel'
 gem 'shellwords' # turns string into command-line-like args
@@ -31,7 +32,7 @@ group :development, :test do
   gem 'io-console'
   gem 'irb'
   gem 'rubocop', require: false
-  gem 'ruby-lsp'
+  gem 'ruby-lsp', require: false
 end
 
 group :test do

@@ -1,0 +1,14 @@
+# .github/dependabot.yml
+version: 2
+updates:
+  - package-ecosystem: "bundler" # For Ruby gems (Gemfile.lock)
+    directory: "/" # Location of your Gemfile.lock
+    schedule:
+      interval: "monthly"
+    # Optional: labels: ["dependencies", "ruby"]
+
+  - package-ecosystem: "docker" # For Docker images (Dockerfile, compose.yaml)
+    directory: "/" # Location of your Dockerfile and compose.yaml
+    schedule:
+      interval: "monthly"
+    # Optional: labels: ["dependencies", "docker"]
