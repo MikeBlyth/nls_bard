@@ -22,10 +22,3 @@ end
 puts "#{@book_number} books processed"
 
 @file.close
-
-# Log in
-# auth = {:username=>"mjblyth@gmail.com", :password=>"derbywarin5", :loginid = "mjblyth@gmail.com"}
-# url = "https://nlsbard.loc.gov:443/nlsbardprod/login/mainpage/NLS"
-# page = HTTParty.get(url, :basic_auth=>auth)
-#
-# https://nlsbard.loc.gov/nlsbardprod/search/title/page/1/sort/s/srch/A/local/0

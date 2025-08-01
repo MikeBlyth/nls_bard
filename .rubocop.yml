@@ -1,0 +1,49 @@
+# This is the configuration file for RuboCop.
+# RuboCop is a Ruby static code analyzer and formatter.
+# For more information, see: https://docs.rubocop.org/rubocop/
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.3
+  Exclude:
+    - 'db_dump/**/*'
+    - 'vendor/**/*'
+    - 'bin/*'
+    - 'BARD books parse.rb'
+    - 'Goodreads ratings.rb'
+    - 'nls_bard_txt_to_db.rb'
+    - 'extract_all_nls_db_numbers.rb'
+    - 'pg-test-connection.rb'
+    - 'pg_test.rb'
+    - 'download_test.rb'
+    - 'download_test2.rb'
+    - 'optionstest.rb'
+    - 'analyze_deps.rb'
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/MethodLength:
+  Max: 80
+  Exclude:
+    - 'nls_bard.rb'
+
+Metrics/AbcSize:
+  Max: 85
+  Exclude:
+    - 'nls_bard.rb'
+
+Metrics/CyclomaticComplexity:
+  Max: 20
+  Exclude:
+    - 'nls_bard.rb'
+
+Metrics/PerceivedComplexity:
+  Max: 20
+  Exclude:
+    - 'nls_bard.rb'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'nls_bard_command_line_options.rb'
+    - 'nls_bard.rb'

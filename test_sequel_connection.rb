@@ -1,8 +1,14 @@
 require 'sequel'
+require 'dotenv/load'
 
 def test_sequel_connection
   # Connect to the database
-  @DB = Sequel.connect('postgres://mike:asendulf53@db/nlsbard')
+  user = ENV.fetch('POSTGRES_USER', 'mike')
+  password = ENV.fetch('POSTGRES_PASSWORD')
+  host = ENV.fetch('POSTGRES_HOST', 'db')
+  db_name = ENV.fetch('POSTGRES_DB', 'nlsbard')
+
+  @DB = Sequel.connect("postgres://#{user}:#{password}@#{host}/#{db_name}")
 
   # Run a simple query
   version = @DB['SELECT version()'].first[:version]

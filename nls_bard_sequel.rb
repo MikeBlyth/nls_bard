@@ -4,7 +4,12 @@ class BookDatabase
   attr_accessor :DB, :books, :cats, :wish, :cat_book, :columns
 
   def initialize
-    @DB = Sequel.connect('postgres://mike:asendulf53@db/nlsbard') # This is the whole Sequel Database object
+    user = ENV.fetch('POSTGRES_USER', 'mike')
+    password = ENV.fetch('POSTGRES_PASSWORD')
+    host = ENV.fetch('POSTGRES_HOST', 'db')
+    db_name = ENV.fetch('POSTGRES_DB', 'nlsbard')
+
+    @DB = Sequel.connect("postgres://#{user}:#{password}@#{host}/#{db_name}")
     # Referenced as @mybooks.DB in nls_bard.rb
     @books = @DB[:books] # Tables ...  									# @mybooks.books
     @cats = @DB[:cats]

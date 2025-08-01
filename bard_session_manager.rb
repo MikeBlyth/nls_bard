@@ -1,6 +1,30 @@
 require 'selenium-webdriver'
 require 'dotenv/load'
 
+# Manages a singleton Selenium WebDriver session for interacting with the
+# NLS BARD (Braille and Audio Reading Download) website.
+#
+# This module is responsible for:
+# - Lazily initializing a single Chrome WebDriver instance.
+# - Handling the login process to the NLS BARD website using credentials
+#   stored in environment variables.
+# - Providing a global access point to the WebDriver instance.
+# - Ensuring that the login process is only attempted once per session.
+# - Providing a method to properly quit the driver and clean up resources.
+#
+# @example
+#   # Initialize the session and log in (if not already done)
+#   BardSessionManager.initialize_nls_bard_chromium
+#
+#   # Get the driver to perform actions
+#   driver = BardSessionManager.nls_driver
+#   driver.navigate.to 'https://nlsbard.loc.gov/bard2-web/'
+#
+#   # Quit the session when done
+#   BardSessionManager.quit
+#
+# @note This module requires the `NLS_BARD_USERNAME` and `NLS_BARD_PASSWORD`
+#   environment variables to be set for the login to succeed.
 module BardSessionManager
   @nls_driver = nil
   @logged_in = false
@@ -41,19 +65,21 @@ module BardSessionManager
       username_field = wait.until { @nls_driver.find_element(name: 'username') }
       password_field = @nls_driver.find_element(name: 'password')
       submit_button = @nls_driver.find_element(name: 'login')
-      username_field.send_keys ENV['NLS_BARD_USERNAME']
-      password_field.send_keys ENV['NLS_BARD_PASSWORD']
+      username_field.send_keys ENV.fetch('NLS_BARD_USERNAME')
+      password_field.send_keys ENV.fetch('NLS_BARD_PASSWORD')
       submit_button.click
 
       wait.until { !@nls_driver.current_url.include?('/login/') }
 
       @logged_in = true
+    rescue KeyError => e
+      puts "Login failed: Missing environment variable - #{e.message}. Please check your .env file."
     rescue Selenium::WebDriver::Error::TimeoutError
       puts 'Login page timed out. The site might be slow or unavailable.'
     rescue Selenium::WebDriver::Error::NoSuchElementError
       puts 'Login form elements not found. The page structure might have changed.'
     rescue StandardError => e
-      puts "An error occurred during login: #{e.message}"
+      puts "An unexpected error occurred during login: #{e.message}"
     end
   end
 

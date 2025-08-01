@@ -1,12 +1,13 @@
 require 'pg'
+require 'dotenv/load'
 
 def test_pg_connection
   # Connect to the database
   conn = PG.connect(
     host: 'db', # This should match the service name in docker-compose.yml
-    dbname: 'nlsbard',
-    user: 'mike',
-    password: 'asendulf53'
+    dbname: ENV.fetch('POSTGRES_DB', 'nlsbard'),
+    user: ENV.fetch('POSTGRES_USER', 'mike'),
+    password: ENV.fetch('POSTGRES_PASSWORD')
   )
 
   # Run a simple query

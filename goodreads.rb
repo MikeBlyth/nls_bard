@@ -4,7 +4,7 @@ require 'httparty'
 require './name_parse'
 
 def double_quote(title)
-  '"' + title.gsub(/"/, '') + '"' # Remove internal quotes, surround with quotes
+  '"' + title.gsub('"', '') + '"' # Remove internal quotes, surround with quotes
 end
 
 def goodreads_url(title, author)
@@ -80,18 +80,18 @@ def title_strings(title)
   title.gsub!(/ :+ /, ': ')
   search_strings = [punct_strip(title)]
   if title =~ /,/
-    search_strings << title.gsub(/,/, '')
-    search_strings << title.gsub(/,/, ':')
+    search_strings << title.gsub(',', '')
+    search_strings << title.gsub(',', ':')
   end
   if title =~ /:/
-    search_strings << title.gsub(/:/, '')
-    search_strings << title.gsub(/:/, ',')
+    search_strings << title.gsub(':', '')
+    search_strings << title.gsub(':', ',')
   end
   while title =~ /(.*)[,.:(;\[]/ # Remove parts after a delimiter ". : ( ; ["
     title = punct_strip Regexp.last_match(1)
     search_strings << title
   end
-  search_strings << title.gsub(/&/, 'and') if title =~ /&/
+  search_strings << title.gsub('&', 'and') if title =~ /&/
   search_strings
 end
 
@@ -180,7 +180,7 @@ def get_stars(ratings) # Find highest rated entry among the array of matching mi
     next unless rating_string =~ /([0-9.]*) avg rating .* ([0-9.,]*) rating/
 
     stars = Regexp.last_match(1).to_f
-    count = Regexp.last_match(2).gsub(/,/, '').to_i
+    count = Regexp.last_match(2).gsub(',', '').to_i
     if count > max_count
       max_count = count
       max_stars = stars
@@ -194,11 +194,11 @@ def search_goodreads_entries(parsed_page, title, author) # Returns array of <spa
   title_array = title_strings(title)
   author_xpath = author.downcase.gsub(/'|\u2019/, '$').gsub(/\u201c|\u201d/, '"') # Replace single quotes with $ since can't use in xpath, curly quotes with straight
   found = false
-  tr_in = "\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\u2019\u201c\u201d\'\""
+  tr_in = "\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\u2019\u201c\u201d'\""
   tr_out = "'abcdefghijklmnopqrstuvwxyz$\"\"$'"
   tr_string = "translate(., #{tr_in}, #{tr_out})"
   while (title_array.count > 0) && !found # Keep using smaller chunks of author's name until a match is found
-    title_xpath = title_array.shift.downcase.gsub(/'/, '$')
+    title_xpath = title_array.shift.downcase.gsub('\'', '$')
     xpath_expr = "//a[@class='bookTitle']/span[@itemprop='name']//text()[contains(#{tr_string},'#{title_xpath}')]/ancestor::td/span[@itemprop='author']/div/a/span[contains(#{tr_string},'#{author_xpath}')]/ancestor::td//span[@class='minirating'][text()]"
     ratings = parsed_page.xpath(xpath_expr) # will be empty if not found
     found = ratings.count > 0

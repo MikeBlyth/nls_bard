@@ -149,3 +149,99 @@ Running a Shell Inside Container
 
 docker-compose up -d
 docker-compose exec app /bin/bash
+
+# Revisions for new BARD (BARD2)
+
+## URL for a specific item
+
+The URL for a given item like DB128900 is https://nlsbard.loc.gov/bard2-web/search/DB128900/. 
+
+## Downloading an item
+
+Go the URL for that page and click on the link like
+
+`<a href="/bard2-web/download/DB128900/?filename=DB-Baldacci_David%2520Strangers%2520in%2520time%253A%2520a%2520World%2520War%2520II%2520novel%2520DB128900&amp;prevPage=Strangers%20in%20time%3A%20a%20World%20War%20II%20novel%20DB128900&amp;from=%2Fsearch%2FDB128900%2F" role="link"><span>Download <span>Strangers in time: a World War II novel</span></span></a>`
+
+## Get newly added books: iterate_update_pages
+Entry URL = https://nlsbard.loc.gov/bard2-web/login/
+From there, click on "Login with BARD" button to go to login page (https://nlsbard.loc.gov/bard2-web/login/)
+Fill in credentials and click on "Login" button to go to home page (https://nlsbard.loc.gov/bard2-web/)
+
+To get recently added items, the "base_url" for method iterate_update_pages is https://nlsbard.loc.gov/bard2-web/search/results/recently-added/?language=en&format=all&type=book
+By default it includes 250 titles on a page. Iterate_update_pages gets a processed page using 
+
+  ```
+  page = get_page('', num, base_url) # i.e. puts HTML into page; get_page returns nil if finished
+  entries = process_page(page)
+  ```
+
+then interates through entries using process_entry to parse the information for each book.
+
+The link to the next page is like 
+
+`<a href="/bard2-web/search/results/recently-added/?language=en&amp;format=all&amp;type=book&amp;offset=350" role="link"><span>Next page<!-- --> </span> ...`
+
+Again, we can iterate by clicking on that link until it doesn't exist, which is probably the most robust solution.
+
+## Format of Item on BARD2 (Search Results Page)
+
+This is the format of a single book entry on the BARD2 pages.
+
+```
+    <div class="item-details" id="DB123456">
+        <h4 class="item-link">
+            <a href="/path/to/item">
+                <span>Title of Item</span>
+            </a>
+        </h4>
+        
+        <div class="item-details-meta-container">
+            <p data-testid="detail-value-p-author">
+                <b data-testid="detail-value-b-author" class="author">Author: </b>Author Name
+            </p>
+            <p data-testid="detail-value-p-reading-time">
+                <b data-testid="detail-value-b-reading-time" class="reading-time">Reading Time: </b>Duration
+            </p>
+            <p data-testid="detail-value-p-narrators-label">
+                <b data-testid="detail-value-b-narrators-label" class="narrators-label">Read by: </b>Narrator Name
+            </p>
+            <p data-testid="detail-value-p-subjects">
+                <b data-testid="detail-value-b-subjects" class="subjects">Subjects: </b>Subject Categories
+            </p>
+        </div>
+        
+        <p class="annotation">Description text content goes here.</p>
+        
+        <p class="publishers">Publisher Information</p>
+        
+        <div class="item-details-button-dropdown">
+            <details id="button-dropdown-cta-buttons" class="button-dropdown">
+                <summary role="button" aria-label="Take Action" class="button-dropdown-summary">
+                    Take Action
+                </summary>
+                <div class="dropdown-submenu">
+                    <ul>
+                        <li>
+                            <a class="download-link" href="/download/path" id="download-button">
+                                <span>Download Item</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/wishlist/path" id="add-button">
+                                <span>Add to Wish List</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+    </div>
+```
+
+### Periodicals
+
+We need to exclude periodicals, which have containers starting like this
+
+`<div class="item-details ItemDetails_detailsContainer__W4rmf" id="DBpsychology-today_2025-07"><h4 class="item-link"><a href="/bard2-web/search/DBpsychology-today_2025-07/?prevPage=recentlyAdded&amp;from=%2Fsearch%2Fresults%2Frecently-added%2F%3FprevDays%3D%26type%3Dbook%26format%3Daudio%26language%3Den" `
+
+The key differences are that the ID is not of the form /[A-Z]{1,3}[0-9]+/ and that the raw title does not have the ID appended. These entries should be ignored.

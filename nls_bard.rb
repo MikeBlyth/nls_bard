@@ -13,7 +13,7 @@ require 'httparty'
 require 'date'
 require './goodreads' # Allows us to access the ratings on Goodreads
 require './nls_bard_sequel' # interface to database
-require_relative './bard_session_manager'
+require_relative 'bard_session_manager'
 require './nls_book_class'
 require './nls_bard_command_line_options'
 require 'shellwords' # turns string into command-line-like args
@@ -26,57 +26,46 @@ require 'dotenv/load'
 @book_number = 0
 
 def download(key)
+  return puts "Invalid key format: '#{key}'. Not a standard book ID." unless key =~ /\A[A-Z]{1,3}[0-9]+\z/
+
   BardSessionManager.initialize_nls_bard_chromium
+  driver = BardSessionManager.nls_driver
+  wait = Selenium::WebDriver::Wait.new(timeout: 15)
+
   begin
-    book_url = "https://nlsbard.loc.gov/nlsbardprod/download/detail/srch/#{key}"
-    BardSessionManager.nls_driver.navigate.to book_url
+    # Navigate to the book's detail page on the new BARD site, per README.md
+    book_url = "https://nlsbard.loc.gov/bard2-web/search/#{key}/"
+    driver.navigate.to book_url
 
-    wait = Selenium::WebDriver::Wait.new(timeout: 15)
+    # Find the download link directly on the page.
     download_link = wait.until do
-      BardSessionManager.nls_driver.find_element(:xpath,
-                                                 "//a[starts-with(@href, 'https://nlsbard.loc.gov/nlsbardprod/download/book/srch/') and contains(text(), 'Download')]")
+      driver.find_element(:xpath, "//a[starts-with(@href, '/bard2-web/download/#{key}') and contains(., 'Download')]")
     end
 
-    book_title = begin
-      download_link.find_element(:xpath, './/span').text
-    rescue StandardError => e
-      puts "Error getting book title: #{e.message}"
-      'Unknown Title'
-    end
-
+    book_title = download_link.text.sub('Download', '').strip
+    puts "Initiating download for: #{book_title} (#{key})"
     download_link.click
-    puts 'Be sure to wait for download to complete before exiting app.'
-  rescue Selenium::WebDriver::Error::TimeoutError => e
-    puts "Timeout error: #{e.message}"
-    puts "Current URL at timeout: #{BardSessionManager.nls_driver.current_url}"
+
+    puts 'Download initiated. Be sure to wait for it to complete before exiting the app.'
+    update_book_records(key, book_title)
+  rescue Selenium::WebDriver::Error::TimeoutError
+    puts "Timeout error: Could not find download elements for #{key}."
+    puts "Current URL at timeout: #{driver.current_url}"
   rescue Selenium::WebDriver::Error::NoSuchElementError => e
-    puts "Element not found error: #{e.message}"
+    puts "Element not found error: The page structure for #{key} may have changed or the book is not available. Error: #{e.message}"
   rescue StandardError => e
-    puts "An unexpected error occurred: #{e.message}"
+    puts "An unexpected error occurred during download of #{key}: #{e.message}"
     puts e.backtrace.join("\n")
   end
 end
 
-def get_page(letter, page, base_url)
-  url = 'https://nlsbard.loc.gov/nlsbardprod/search/title/page/<page>/sort/s/srch/<letter>/local/0'
-  url = base_url.sub(/<page>/, page.to_s).sub(/<letter>/, letter)
-  BardSession
-end
-
 # Process raw HTML and return array of plain text entries
-def process_page(page)
-  parsed = Nokogiri::HTML(page)
-  lp = parsed.xpath("//a[contains(text(),'Last Page')]/@href") # Find "last page" link
-  if lp # last page link found
-    # lp will be URL something like "https://nlsbard.loc.gov:443/nlsbardprod/search/title/page/2/sort/s/local/0/srch/Q/"
-    lp.text =~ %r{page/([0-9]+)/}i
-    @last_page = Regexp.last_match(1).to_i
-  else # no last page link, so this is the only page for this letter
-    @last_page = 1
-  end
-  books_noko = parsed.xpath('//span[a][h4]') # Array of Nokogiri objects
-  books_noko.search('.//h2').remove # These are Date headings
-  books_noko.map { |b| b.text }
+def process_page(page_content)
+  parsed_page = Nokogiri::HTML(page_content)
+  # The new BARD site wraps each book in a div with the class 'item-details'.
+  # We return the Nokogiri elements themselves for more robust parsing in process_entry.
+  # The logic to find the "Last Page" is no longer needed as we iterate by clicking the "Next page" link.
+  parsed_page.css('div.item-details')
 end
 
 def next_line(lines)
@@ -92,53 +81,42 @@ def next_line(lines)
   nxt.strip
 end
 
-def process_entry(entry) # Generate Book from an entry
-  book = Book.new
-  lines = entry.split("\n")
-  categories = []
-  lines.pop while lines.last == '' # remove trailing blank lines
-  # TITLE
-  next_line(lines) =~ /(.*)\s+(DB\w+)/ # Book title should be of form "Title DBxxxx"
-  return nil unless Regexp.last_match(1) # doesn't match format for a book, ignore it
+# Generate Book from a Nokogiri element
+def process_entry(book_element)
+  book_hash = {}
 
-  book[:title] = Regexp.last_match(1).unicode_normalize
-  book[:key] = Regexp.last_match(2) # The DBxxxx
-  book[:title].sub!(%r{ */ *$}, '') # get rid of trailing slash in title
-  book[:title].sub!(/\. *$/, '') # get rid of trailing period
-  # AUTHOR
-  book[:author] = next_line(lines).unicode_normalize # This should be only the author(s)
-  if book[:author] =~ /^([\w,.\-' ]*)/ # Eliminate 2nd authors, parentheticals, etc.
-    book[:author] = Regexp.last_match(1)
-  end
-  if book[:author] =~ /(.*[a-z])\.$/ # Strip trailing . but not if it's part of an initial like F. Hope only author is on this line
-    book[:author] = Regexp.last_match(1)
-  end
+  # The book's key is the ID of the container div
+  book_hash[:key] = book_element['id']
+  return nil unless book_hash[:key]
 
-  # READING TIME
-  reading_time = next_line(lines)
-  if reading_time =~ /Reading time: (([0-9]+) hours)?([., ]+?)? ?(([0-9]+) minutes)?/
-    t = ((Regexp.last_match(2) || 0).to_f + (Regexp.last_match(5) || 0).to_f / 60.0)
-    reading_time = ('%.1f' % t).to_f
-  else
-    reading_time = 0
-  end
-  book[:reading_time] = reading_time
-  read_by = next_line(lines)
-  if read_by =~ /Read by (.*)/
-    book[:read_by] = Regexp.last_match(1)
-  else # Read by is missing, so this must be the first (or only) category
-    lines.unshift read_by # put the category back into lines so we'll read it next
-  end
+  # Exclude periodicals, which have a non-standard key format (e.g., 'DBpsychology-today_2025-07')
+  return nil unless book_hash[:key] =~ /\A[A-Z]{1,3}[0-9]+\z/
 
-  # BLURB
-  lines.pop if lines.last =~ /Download / # Should always be there as last line
-  book[:blurb] = lines.pop # Last line before Download link,
+  # Extract details using CSS selectors, with &. to prevent errors on missing elements
+  raw_title = book_element.at_css('h4.item-link a span')&.text&.strip || ''
+  book_hash[:title] = raw_title.sub(/\s+#{book_hash[:key]}$/, '').strip
+  book_hash[:author] =
+    book_element.at_css('p[data-testid="detail-value-p-author"]')&.text&.sub('Author:', '')&.strip || ''
+  book_hash[:read_by] =
+    book_element.at_css('p[data-testid="detail-value-p-narrators-label"]')&.text&.sub('Read by:', '')&.strip || ''
+  book_hash[:categories] =
+    book_element.at_css('p[data-testid="detail-value-p-subjects"]')&.text&.sub('Subjects:', '')&.strip || ''
+  book_hash[:blurb] = book_element.at_css('p.annotation')&.text&.strip || ''
 
-  # CATEGORIES
-  lines.each do |line|
-    book.add_category line if (line > '') and (line =~ /(production)|(National)|(NLS)/).nil?
-  end
-  book
+  # Parse reading time
+  time_str = book_element.at_css('p[data-testid="detail-value-p-reading-time"]')&.text
+  book_hash[:reading_time] = parse_reading_time(time_str)
+
+  Book.new(book_hash)
+end
+
+def parse_reading_time(time_str)
+  return 0.0 unless time_str
+
+  hours = time_str.match(/(\d+)\s+hour/)&.captures&.first.to_i
+  minutes = time_str.match(/(\d+)\s+minute/)&.captures&.first.to_i
+
+  (hours + (minutes / 60.0)).round(1)
 end
 
 def get_resume_mark
@@ -159,97 +137,124 @@ def save_resume_mark(letter, page)
   nil
 end
 
-def iterate_pages(start_letter, start_num)
-  initialize_nls_bard_chromium
-  @last_page = start_num # will be re-determined from next page read
-  @test_limit = 999 # Pages per letter -
-  @max_books_per_page = 9999
+def iterate_pages(start_letter)
+  BardSessionManager.initialize_nls_bard_chromium
+  driver = BardSessionManager.nls_driver
+
   letters = (start_letter..'Z').to_a
   letters.each do |letter|
-    num = if letter == start_letter
-            start_num
-          else
-            1
-          end
-    while (num <= @last_page) and (num <= @test_limit)
-      save_resume_mark(letter, num)
-      @book_number = 0
-      base_url = 'https://nlsbard.loc.gov/nlsbardprod/search/title/page/<page>/sort/s/srch/<letter>/local/0'
-      page = get_page(letter, num, base_url) # i.e. puts HTML into page; get_page returns nil if finished
-      entries = process_page(page)
-      puts "\n************************ PAGE #{letter}: #{num} of #{@last_page} ***********************"
-      entries.each do |e|
-        @book_number += 1
-        break if @book_number > @max_books_per_page
+    # For a full A-Z scrape, we perform a search for each letter.
+    # The new site's search URL for titles starting with a letter:
+    initial_url = "https://nlsbard.loc.gov/bard2-web/search/title/#{letter}/"
+    puts "\n--- Starting scrape for letter '#{letter}' ---"
+    driver.navigate.to initial_url
 
-        book = process_entry(e)
-        next unless book # because if book is nil, there is no book to process!!
+    page_number = 1
+    loop do
+      save_resume_mark(letter, page_number)
+      puts "\n--- Processing Page #{page_number} for letter '#{letter}' ---"
 
-        book.get_rating
-        @outfile.puts book.to_s
-        @mybooks.insert_book(book)
-        puts "#{book[:stars]} (#{book[:ratings]}): #{book[:title]} <#{book[:author]}>"
-        sleep 1
+      sleep 1 # Give page time to load
+      page_content = driver.page_source
+      entries = process_page(page_content)
+
+      entries.each { |entry| process_book_entry(entry) }
+      # Find and click the "Next page" link to continue.
+      begin
+        next_page_link = driver.find_element(:xpath, "//a[span[contains(text(), 'Next page')]]")
+        puts "Navigating to next page for letter '#{letter}'..."
+        next_page_link.click
+        page_number += 1
+      rescue Selenium::WebDriver::Error::NoSuchElementError
+        puts "No more pages for letter '#{letter}'. Moving to next letter."
+        break # Exit the inner loop for this letter
       end
-      num += 1
     end
-    save_resume_mark('!', 9999)
   end
+  save_resume_mark('!', 9999) # Mark the A-Z scrape as complete
 end
 
 def iterate_update_pages(days)
-  initialize_nls_bard_chromium
-  @last_page = 1
-  num = 1 # Starting page number
-  letter = '-' # Just a placeholder
-  base_url =
-    # "https://nlsbard.loc.gov/nlsbardprod/search/recently_added/page/<page>/sort/s/local/0/day/#{days}/srch/recently_added/"
-    # "https://nlsbard.loc.gov/nlsbardprod/search/recently_added/page/1/sort/s/srch/recently_added/local/0/day/#{days}/until/now/"
-    # The format of the 'select so many recent days' request isn't working, so will just say "recently added". However
-    # this is inadequate if it's been too long since running the query, as books will slip through the cracks!
-    'https://nlsbard.loc.gov/nlsbardprod/search/recently_added/page/<page>/sort/s/srch/recently_added/local/0'
-  while num <= @last_page
-    @book_number = 0
-    page = get_page('', num, base_url) # i.e. puts HTML into page; get_page returns nil if finished
-    entries = process_page(page)
-    puts "\n************************ PAGE #{letter}: #{num} of #{@last_page} ***********************"
-    entries.each do |e|
-      @book_number += 1
-      book = process_entry(e)
+  BardSessionManager.initialize_nls_bard_chromium
 
-      if book # because if book is nil, there is no book to process!!
-        if !@mybooks.book_exists?(book)
-          book.get_rating
-          sleep 2
-          book[:has_read] = false
-          @outfile.puts book.to_s # Optional
-          @mybooks.insert_book(book)
-          book.display if true || @mybooks.is_interesting(book[:key])
-        else
-          @mybooks.update_book_categories(book)
-          if book[:stars] == 0 # Just a one-time fix to get ratings of existing entries
-            existing_book = @mybooks.get_book(book[:key])
-            book[:stars] = existing_book[:stars] # Fill these in
-            book[:ratings] = existing_book[:ratings]
-          end
-          @outfile.puts book.to_s
-          puts "#{book[:stars]} (#{book[:ratings]}): #{book[:title]} <#{book[:author]}> <#{book[:categories]}>"
-        end
-      end
+  # Navigate to the initial "recently added" page.
+  # The `days` parameter is noted as not working for the new site.
+  initial_url = 'https://nlsbard.loc.gov/bard2-web/search/results/recently-added/?language=en&format=all&type=book'
+  BardSessionManager.nls_driver.navigate.to initial_url
+
+  page_number = 1
+  loop do
+    puts "\n--- Processing Page #{page_number} ---"
+
+    # Give the page a moment to load, especially after a click
+    sleep 1
+    page_content = BardSessionManager.nls_driver.page_source
+
+    # NOTE: process_page and process_entry will need to be adapted for the new site's HTML structure.
+    entries = process_page(page_content)
+
+    entries.each { |entry| process_book_entry(entry) }
+
+    # Find and click the "Next page" link to continue.
+    begin
+      # The link text has a comment inside the span, so a partial match is better. e.g. <span>Next page<!-- --> </span>
+      next_page_link = BardSessionManager.nls_driver.find_element(:xpath, "//a[span[contains(text(), 'Next page')]]")
+      puts 'Navigating to next page...'
+      next_page_link.click
+      page_number += 1
+    rescue Selenium::WebDriver::Error::NoSuchElementError
+      # This is the expected way to exit the loop: no "Next page" link was found.
+      puts 'No more pages to process. Finished.'
+      break
     end
-    num += 1
-    # return if @book_number > 4
   end
 end
 
+private
+
+def process_book_entry(entry)
+  book = process_entry(entry) # entry is now a Nokogiri element
+  return unless book # Skip if entry couldn't be parsed into a book
+
+  if @mybooks.book_exists?(book[:key])
+    update_existing_book(book)
+  else
+    add_new_book(book)
+  end
+end
+
+def add_new_book(book)
+  puts "New book found: #{book[:title]}"
+  book.get_rating
+  sleep 2 # Be respectful to Goodreads API
+  book[:has_read] = false
+  @outfile.puts book.to_s if @outfile
+  @mybooks.insert_book(book)
+  book.display if @mybooks.is_interesting(book[:key])
+end
+
+def update_existing_book(book)
+  puts "Updating existing book: #{book[:title]}" if $verbose
+  @mybooks.update_book_categories(book)
+  existing_book = @mybooks.get_book(book[:key])
+
+  # If the existing book has no rating, try to fetch it now.
+  return unless existing_book && (existing_book[:stars].nil? || existing_book[:stars].zero?)
+
+  book.get_rating
+  sleep 2
+  @mybooks.update_book_rating(book)
+  puts "-> Fetched rating: #{book[:stars]} stars." if $verbose
+end
+
 def read_all
-  letter, page = get_resume_mark
+  letter, _page = get_resume_mark # page is no longer used for navigation
   if letter == '!'
     raise 'Entire catalog already read. Delete nls_bard_bookmark.txt and re-run if you want another pass.'
   end
 
   @outfile = File.open('nls_bard_books.txt', 'a') # append to existing file
-  iterate_pages(letter, page)
+  iterate_pages(letter)
 end
 
 def read_updates(days)
@@ -350,32 +355,29 @@ def backup_tables
   # dump_table_yaml('cat_book.yaml', @mybooks.cat_book)
 end
 
-def rating_update_needed(book) # For now, this is adjusted by changing the code! ******************
+def rating_update_needed(book)
   return false if book[:language] != 'English'
 
-  #  interesting = @mybooks.is_interesting(book[:key], :minimum_stars=>0, :minimum_ratings=>0 )
-  update_interval = 60 # days since last check
-  max_ratings_needed = 1_000_000 # Can use lower number once all have been rated once
-  time_for_update = book[:stars_date].nil? || ((Date.today - book[:stars_date]).to_i >= update_interval)
-  rating_criteria = book[:ratings].nil? || book[:ratings] < max_ratings_needed
-  time_for_update && rating_criteria
+  # If the book has never been rated, it always needs an update.
+  return true if book[:stars_date].nil? || book[:ratings].nil?
 
-  #  xtitle = book[:title] || ''
-  #  gtitle = book[:goodreads_title] || ''
-  #  puts "#{book[:title]} | #{book[:goodreads_title][0..20]} | #{n}"
-  #  return ( $manual_update && (book[:goodreads_title] == 'no match xxx')) # !!!! This lets us visit ONLY "no match" titles if on manual update
-  #  return xtitle =~ /A prayer for the city/i  # Use this line to check only certain title
-  # return (gtitle == 'no match xxx')  # Use this line only to update ALL records with "no match"
+  days_since_last_check = (Date.today - book[:stars_date]).to_i
+  ratings_count = book[:ratings]
+
+  # For books with few ratings, check more frequently to get a stable rating.
+  return days_since_last_check >= 60 if ratings_count < 100
+
+  # For books with many ratings, check much less frequently.
+  days_since_last_check >= 365
 end
 
 def update_ratings
   i = 0
   #  books_to_update = @mybooks.books_with_desired_category.order(:key) # Use this one to update only the desired-category books
   #  books_to_update = @mybooks.books.order(:title)  ### Update all books
-  books_to_update = @mybooks.books_with_desired_category.order(:key) ### Update books of desired categories
+  books_to_update = @mybooks.books_with_desired_category.order(:key) # Update books of desired categories
   books_to_update.each do |bookhash|
     i += 1
-    next if i < 17_000
 
     book = Book.new(bookhash)
     # Time to update rating?
@@ -534,20 +536,31 @@ end
 @nls_driver = nil
 @logged_in = false
 initialize_database
-args = ARGV
-Reline::HISTORY << args.join(' ')
 
-while args != []
-  downloading = args.include? '-d'
-  handle_command args
-  break if args.include?('exit') and !downloading
+# Handle initial command-line arguments if they exist
+unless ARGV.empty?
+  Reline::HISTORY << ARGV.join(' ')
+  downloading = ARGV.include?('-d')
+  handle_command(ARGV)
+  # Exit if 'exit' was a command-line argument and we weren't downloading
+  if ARGV.include?('exit') && !downloading
+    wrap_up
+    exit
+  end
+end
 
+# Enter the interactive command loop (REPL)
+loop do
   puts
   puts "Enter command or 'quit'"
-  #   command_line = gets.chomp
   command_line = Reline.readline('> ', true)
+  break if command_line.nil? # Handle Ctrl-D for EOF
+
   args = command_line.shellsplit
-  break if args == [] || args[0] =~ /(exit)|(end)|(quit)/i
+  break if args.empty? || args[0] =~ /(exit)|(end)|(quit)/i
+
+  Reline::HISTORY << command_line
+  handle_command(args)
 end
 
 wrap_up
