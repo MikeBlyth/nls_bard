@@ -1,0 +1,43 @@
+# Use a specific, slim version of the Ruby image for a smaller footprint
+FROM ruby:3.3.1-slim
+
+# Install necessary dependencies for building gems (like nokogiri and pg)
+# and for running the application (like chromium for selenium)
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    chromium \
+    chromium-driver \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user to run the application for better security
+RUN useradd --create-home --shell /bin/bash appuser
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy Gemfile and Gemfile.lock to leverage Docker's layer caching.
+# This step will only be re-run if these files change.
+COPY Gemfile Gemfile.lock ./
+
+# Install gems, excluding development and test groups.
+# The --jobs flag can speed up the process.
+RUN bundle config set --local without 'development:test' && \
+    bundle install --jobs=$(nproc) --retry 3
+
+# Copy the rest of the application code into the container
+COPY . .
+
+# Change ownership of the app directory to the non-root user
+RUN chown -R appuser:appuser /app
+
+# Switch to the non-root user
+USER appuser
+
+# Set the entrypoint to run the application.
+# This allows `docker run nls-bard-prod -f -t "Dune"` to work.
+ENTRYPOINT ["ruby", "nls_bard.rb"]
+
+# The default command if no arguments are provided.
+# This will start the interactive prompt.
+CMD []

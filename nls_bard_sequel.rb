@@ -122,13 +122,13 @@ class BookDatabase
   end
 
   def insert_wish(hash)
-    author = hash[:author]
-    title = hash[:title]
-    if ((title || '') == '') || ((author || '') == '') # Both title and author are required
+    author = (hash[:author] || '').strip
+    title = (hash[:title] || '').strip
+    if title.empty? || author.empty? # Both title and author are required
       puts 'Error - both title and author are required for wish list'
       return
     end
-    b = get_by_hash(hash).first # See if a matching book is already in the database
+    b = get_by_hash({ title:, author: }).first # See if a matching book is already in the database
     if b # match
       read = if b[:has_read]
                'and has already been read'
@@ -157,6 +157,30 @@ class BookDatabase
     return unless (hash[:id] || '') + (hash[:key] || '') + (hash[:title] || '') > ''
 
     @wish.filter(hash).delete
+  end
+
+  def wish_remove_by_title(partial_title)
+    clean_title = partial_title.strip
+    matches = @wish.filter(Sequel.ilike(:title, "%#{clean_title}%"))
+
+    case matches.count
+    when 0
+      puts "No wishlist item found matching '#{clean_title}'."
+    when 1
+      item = matches.first
+      puts "Found: '#{item[:title]}' by #{item[:author]}."
+      print 'Are you sure you want to remove this item from the wishlist? (y/n) '
+      confirmation = gets.chomp.downcase
+      if confirmation == 'y'
+        matches.delete
+        puts 'Item removed from wishlist.'
+      else
+        puts 'Removal cancelled.'
+      end
+    else
+      puts "Found multiple matches for '#{clean_title}'. Please be more specific."
+      matches.each { |item| puts "  - '#{item[:title]}' by #{item[:author]}" }
+    end
   end
 
   def check_for_wishlist_matches

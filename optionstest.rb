@@ -3,7 +3,7 @@ require 'optparse/time'
 require 'ostruct'
 require 'pp'
 
-class Optparse
+class OptparseExample
 
   # Return a structure describing the options.
   #
@@ -61,6 +61,13 @@ class Optparse
         options.verbose = v
       end
 
+      # Wishlist remove
+      opts.on('--wish_remove TITLE', 'Remove title from wishlist') do |title|
+        options.wish_remove = title
+      end
+
+
+
       opts.separator ""
       opts.separator "Common options:"
 
@@ -79,11 +86,11 @@ class Optparse
 
 end  # class OptparseExample
 
-#options = OptparseExample.parse(ARGV)
+options = OptparseExample.parse(ARGV)
 # options_input =  ['--mark', 'DB1,DB2,DB3', '--find', 'Winds of War', '--output', 'temp.txt']
 # options = OptparseExample.parse(options_input)
 #pp options_input 
-#pp options
+pp options
 #pp options.days, options.books
 #options = OptparseExample.parse(['-h'])
 #pp options

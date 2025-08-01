@@ -51,6 +51,27 @@ Examples with the shell files
 	
 	nls-update exit		Updates the database with recently added books, exits the app and container. 
 
+#### Contents of /usr/local/bin/nls
+
+```
+    #!/bin/bash
+
+    # Default arguments if none are provided
+    DEFAULT_ARGS="-f -t 'x12xxx'"
+
+    # Check if arguments are provided
+    if [ $# -eq 0 ]; then
+        ARGS="$DEFAULT_ARGS"
+    else
+        ARGS="$@"
+    fi
+
+    # Run the docker-compose command with the appropriate arguments
+    cd /mnt/c/users/mike/nls_bard
+    docker-compose run --rm app ruby nls_bard.rb $ARGS
+```
+
+
 ## Book Updates
 
 I'm using Windows Task Scheduler to run `nls-update` daily in order to keep the catalog up to date, but this should be checked from time to time.
@@ -64,6 +85,8 @@ Update the database of titles: `-g 30`
 Add a title to wish list: `-w -t "Tom Sawyer" -a Twain`
 
 Check whether any wish list titles are found: `-w`
+
+Remove an item from the wishlist: `--wish_remove "partial title"`
 
 Find a title, can use title and/or author: `-f -t "Tom Sawyer" -a Twain [-v]`
 - -v option gives long (verbose) output including whether and when the title was previously downloaded
@@ -87,6 +110,8 @@ Usage: nls_bard.rb [actions]
     --marked			Select marked books
 
     -w, --wish			Add to wishlist (use --author, --title), or print wishlist
+
+    --wish_remove "partial title"	Remove item from wishlist by partial title match
 
     -d, --download x,y,z		Download books by key
 

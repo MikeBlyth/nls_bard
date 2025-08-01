@@ -463,6 +463,8 @@ def handle_command(command_line)
     end
   end
 
+  @mybooks.wish_remove_by_title(options.wish_remove) if options.wish_remove > ''
+
   if options.mark != []
     options.mark.map! { |key| key.upcase }
     options.mark.each do |key|

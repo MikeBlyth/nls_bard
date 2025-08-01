@@ -1,0 +1,25 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug nls_bard.rb (REPL)",
+      "type": "rdbg",
+      "request": "launch",
+      "script": "${workspaceFolder}/nls_bard.rb",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "useTerminal": true,
+      "useBundler": true
+    },
+    {
+      "name": "Debug: Current File",
+      "type": "rdbg",
+      "request": "launch",
+      "script": "${file}",
+      "useBundler": true
+    }
+  ]
+}
