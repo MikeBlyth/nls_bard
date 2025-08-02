@@ -1,26 +1,42 @@
+name: 'nls-bard' # Explicitly name the project to avoid conflicts
 services:
   db:
     image: postgres:13
     environment:
+      POSTGRES_USER: mike
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: nlsbard
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db_dump:/db_dump
+    restart: unless-stopped
   app:
-    build: .
+    build:
+      context: .
+      args:
+        - UID=${HOST_UID:-1000}
+        - GID=${HOST_GID:-1000}
     depends_on:
       - db
     environment:
       DATABASE_URL: postgres://mike:${POSTGRES_PASSWORD}@db/nlsbard
       NLS_BARD_USERNAME: ${NLS_BARD_USERNAME}
       NLS_BARD_PASSWORD: ${NLS_BARD_PASSWORD}
+      # Add individual DB components for consistency with prod and Sequel connection helpers
+      POSTGRES_HOST: db
+      POSTGRES_DB: nlsbard
+      POSTGRES_USER: mike
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - .:/app
       - ${WIN_DOWNLOADS_PATH}:/home/chrome/Downloads  # Updated this line
     ports:
       - "3000:3000"
-    command: tail -f /dev/null  # This will keep the container running after app ends
+    # Keep the container running for development.
+    command: sleep infinity
+    tty: true
+    # Ensure stdin is kept open for interactive `docker-compose run` commands.
+    stdin_open: true
 
 volumes:
   postgres_data:

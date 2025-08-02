@@ -1,4 +1,6 @@
 version: '3.8'
+name: 'nls-bard-dev' # Unique project name for the dev container environment
+
 services:
   # Update this to the name of the service you want to work with in your docker-compose.yml file
   app:

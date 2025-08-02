@@ -1,3 +1,3 @@
 # Copy this file to /usr/local/bin
-cd /mnt/d/users/mike/nls_bard
+# This script should be run from the project's root directory.
 docker-compose run --rm app ruby nls_bard.rb -g 30 exit

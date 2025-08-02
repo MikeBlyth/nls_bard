@@ -2,74 +2,73 @@
 
 The purpose of this app is to make it more convenient to find and download audio books for the blind from the NLS Bard site (https://nlsbard.loc.gov/). The app
 
-*	Downloads entries from the NLS database into a local Postgresql database
-*	Gets Goodreadings for each book where they exist and adds that to the database
-*	Keeps a wishlist and checks it against books that exist in the database
-*	Provides tools for searching
-*	Facilitates downloading titles
+*   Downloads entries from the NLS database into a local Postgresql database
+*   Gets Goodreads ratings for each book where they exist and adds that to the database
+*   Keeps a wishlist and checks it against books that exist in the database
+*   Provides tools for searching
+*   Facilitates downloading titles
 
-Originally, the app was a local one, but it now runs in Docker to avoid changes in environment (Ruby version, Chrome updates ...) from causing problems.
+This project runs inside Docker to create a stable, consistent environment and avoid issues with local changes to Ruby, Chrome, or system dependencies.
 
-## Installing
+## Installation and Setup
 
-As a Docker app, this runs in Linux. I'm using WSL. So from Windows with WSL 2 installed:
+These instructions assume you are using WSL 2 on Windows, with Docker Desktop installed and integrated with your WSL distribution.
 
-- Enter "wsl" from the terminal to start WSL.
-- Install the git repo
-- Use Docker Desktop to connect Docker to WSL (Settings - Resources - WSL Integration)
-- Install the git repo
-- Build the Docker image: `docker-compose up build` from the app's home folder
-- Copy the 'nls' and 'nls-update' files from the app folder to `/usr/bin/bash` and set permissions to make them executable if needed.
-- Install Postgresql database
-  - Install PG (find instructions)
-  - Install the database from a backup file like nls_bard_db_dump.sql.zip 
-- Create .env file in app base directory with passwords:
-```
-NLS_BARD_USERNAME=<username>
-NLS_BARD_PASSWORD=<password>
-POSTGRES_PASSWORD=<database password>
-```
- 
-## Running
+1.  **Clone the Repository:**
+    ```bash
+    git clone <your-repo-url>
+    cd nls_bard
+    ```
 
-In WSL,
+2.  **Configure Your Environment (One-Time Setup):**
+    Create a `.env` file in the project root. This file stores your personal credentials and user configuration so Docker can run the application correctly without file permission errors.
 
-	* `docker-compose exec app bash`
-	* `ruby nls_bard.rb <commands>` from the command line
+    You can create this file automatically by running the command below. **You must edit the file afterwards** to add your NLS BARD username, password, and database password.
 
-### Shortcut files
+    ```bash
+    cat <<EOF > .env
+    # NLS Bard Credentials
+    NLS_BARD_USERNAME=your_username_here
+    NLS_BARD_PASSWORD=your_password_here
+    
+    # PostgreSQL Database Password
+    POSTGRES_PASSWORD=a_strong_password_for_the_database
+    
+    # Path to your Windows Downloads folder (for WSL)
+    # Example: /mnt/c/Users/YourUser/Downloads
+    WIN_DOWNLOADS_PATH=/mnt/d/Users/mike/Downloads
+    
+    # Host User and Group ID for file permissions.
+    # These are set automatically to match your current user.
+    HOST_UID=$(id -u)
+    HOST_GID=$(id -g)
+    EOF
+    ```
 
-*This is all you need 95% of the time*, once the files are installed.
+3.  **Build Docker Images:**
+    With your `.env` file configured, build the images from the project root. You only need to do this once, or when you change the `Dockerfile` or `Gemfile`.
+    ```bash
+    docker-compose build
+    ```
 
-Those files will start a container, execute the command, and prompt for the next command. If 'exit' is one of the command line arguments, the app will close after the one command. In either case, the container will close and disappear after the app session.
+4.  **Database Setup (First Time Only):**
+    - Start the database service: `docker-compose up -d db`
+    - If you have a database dump (e.g., `nls_bard_db_dump.sql`) in the `db_dump` folder, restore it:
+      ```bash
+      docker-compose exec -T db psql -U mike -d nlsbard < db_dump/nls_bard_db_dump.sql
+      ```
 
-Examples with the shell files
+5.  **(Optional) Install Helper Scripts:** For convenience, you can copy the helper scripts to a location in your `PATH`.
+    ```bash
+    sudo cp nls nls-update /usr/local/bin/
+    sudo chmod +x /usr/local/bin/nls /usr/local/bin/nls-update
+    ```
 
-	nls -f -a seuss		Finds books by Seuss, then prompts for command
+## Usage
 
-	nls -f -a seuss exit	Finds books by Seuss, then exits the app and container	
-	
-	nls-update exit		Updates the database with recently added books, exits the app and container. 
+**Important:** The helper scripts (`nls`, `nls-update`) must be run from the project's root directory (the one containing `docker-compose.yml`).
 
-#### Contents of /usr/local/bin/nls
-
-```
-    #!/bin/bash
-
-    # Default arguments if none are provided
-    DEFAULT_ARGS="-f -t 'x12xxx'"
-
-    # Check if arguments are provided
-    if [ $# -eq 0 ]; then
-        ARGS="$DEFAULT_ARGS"
-    else
-        ARGS="$@"
-    fi
-
-    # Run the docker-compose command with the appropriate arguments
-    cd /mnt/c/users/mike/nls_bard
-    docker-compose run --rm app ruby nls_bard.rb $ARGS
-```
+The helper scripts start a temporary container, execute your command, and then prompt for the next command in an interactive session.
 
 
 ## Book Updates
@@ -143,8 +142,9 @@ Runtime options:
 
 ## Shell files
 
-These are in /usr/local/bin
-nls:
+These helper scripts are located in the project root and can be copied to a directory in your `PATH` (like `/usr/local/bin`) for convenience. They must be run from the project's root directory.
+
+**`nls`:**
 ```
 #!/bin/bash
 
