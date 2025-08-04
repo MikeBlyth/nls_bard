@@ -1,4 +1,0 @@
-#!/bin/bash
-# Pass all arguments ("$@") directly to the application inside the container.
-# The app will show help or start the REPL if no arguments are given.
-docker-compose run --rm app ruby nls_bard.rb "$@"
