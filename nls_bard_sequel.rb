@@ -1,7 +1,12 @@
 require 'sequel'
+require_relative 'name_parse'
 
 class BookDatabase
   attr_accessor :DB, :books, :cats, :wish, :cat_book, :columns
+
+  # A set of common, non-descriptive words to ignore during fuzzy searches.
+  STOP_WORDS = Set.new(%w[a an and are as at be but by for if in into is it no not of on or such that the their then
+                          there these they this to was will with])
 
   def initialize
     user = ENV.fetch('POSTGRES_USER', 'mike')
@@ -16,6 +21,7 @@ class BookDatabase
     @wish = @DB[:wishlist]
     @cat_book = @DB[:cat_book]
     @columns = @books.columns # Book columns
+    setup_database_indexes
   end
 
   def book_exists?(key)
@@ -87,11 +93,44 @@ class BookDatabase
   end
 
   def get_by_hash(filters) # This one uses case-insensitive filter and only certain fields
-    return @books.where(key: filters[:key]) if (filters[:key] || '') > ''
-
     @books.filter(Sequel.ilike(:title, "%#{filters[:title] || ''}%") &
                   Sequel.ilike(:author, "%#{filters[:author] || ''}%") &
           Sequel.ilike(:blurb, "%#{filters[:blurb] || ''}%"))
+  end
+
+  def get_by_hash_fuzzy(filters, threshold: 0.3)
+    query = @books.dup
+
+    # For titles, we use a standard ILIKE search. This is stable for phrases.
+    if (title_filter = filters[:title] || '') > ''
+      significant_words = title_filter.downcase.split.reject { |word| STOP_WORDS.include?(word) }
+      significant_words.each { |word| query = query.where(Sequel.ilike(:title, "%#{word}%")) }
+    end
+    # For authors, we use Levenshtein distance, which is more intuitive for typos.
+    if (author_filter = filters[:author] || '') > ''
+      # Parse the user's input to get the last name.
+      last_name_from_input = name_parse(author_filter)[:last]
+      # Allow an edit distance of 1 for short names, 2 for longer ones.
+      max_distance = last_name_from_input.length > 6 ? 2 : 2
+      query = query.where(Sequel.lit('levenshtein(lower(get_last_name(author)), lower(?)) <= ?', last_name_from_input,
+                                     max_distance))
+    end
+
+    # --- Ranking Phase ---
+    order_expressions = []
+    if (filters[:title] || '') > ''
+      order_expressions << Sequel.function(:similarity, Sequel.function(:lower, :title),
+                                           Sequel.function(:lower, filters[:title]))
+    end
+    if (filters[:author] || '') > ''
+      last_name_from_input = name_parse(filters[:author])[:last]
+      order_expressions << Sequel.function(:similarity, Sequel.function(:lower, Sequel.lit('get_last_name(author)')),
+                                           Sequel.function(:lower, last_name_from_input))
+    end
+
+    return query.order(Sequel.desc(order_expressions.reduce(:+))) if order_expressions.any?
+
+    query # Return the unordered query if no valid filters were provided.
   end
 
   def select_books(filter_hash) # This won't do case-insensitive searches
@@ -152,7 +191,7 @@ class BookDatabase
 
   def list_wish # List the wishlist
     puts 'Wish list:'
-    @wish.each { |w| puts "\t#{w[:title]} by #{w[:author]}" }
+    @wish.order(:author, :title).each { |w| puts "\t#{w[:title]} by #{w[:author]}" }
   end
 
   def wish_delete(hash)
@@ -187,18 +226,30 @@ class BookDatabase
   end
 
   def check_for_wishlist_matches
-    joiner =  "SELECT id, books.title, books.author, books.key FROM wishlist INNER JOIN books ON books.title ILIKE Concat('%',wishlist.title,'%') AND books.author ILIKE Concat('%',wishlist.author,'%')"
-    matches = @DB[joiner] # Using raw SQL since I can't figure out the right Sequel form
-    if matches.count > 0
-      puts 'Found matches to wishlist:'
-      matches.each do |m|
-        puts "\t#{m[:title]} by #{m[:author]} (#{m[:key]})"
-        mkey = m[:key]
-        @wish.filter(id: m[:id]).update(key: m[:key])
+    puts '(New) Checking for wishlist matches...'
+    found_any = false
+
+    # Iterate over each item in the wishlist and query for it individually.
+    # This is more efficient than a single, complex JOIN on two ILIKE conditions.
+    @wish.each do |wish_item|
+      # Use the existing efficient search method.
+      matching_books = get_by_hash({ title: wish_item[:title], author: wish_item[:author] })
+
+      next if matching_books.empty?
+
+      # Print the header only when the first match is found.
+      unless found_any
+        puts 'Found matches to wishlist:'
+        found_any = true
       end
-    else
-      puts 'No matches found for wishlist items.'
+
+      matching_books.each do |book|
+        puts "\t'#{wish_item[:title]}' matched: #{book[:title]} by #{book[:author]} (#{book[:key]})"
+        # Update the wishlist item with the key of the found book.
+        @wish.where(id: wish_item[:id]).update(key: book[:key])
+      end
     end
+    puts 'No new matches found for wishlist items.' unless found_any
   end
 
   def insert_book(newbook)
@@ -273,5 +324,40 @@ class BookDatabase
     end
   rescue StandardError => e
     puts "Error during database dump or zip process: #{e.message}"
+  end
+
+  private
+
+  def setup_database_indexes
+    # Enable the pg_trgm extension required for efficient text searching.
+    @DB.run('CREATE EXTENSION IF NOT EXISTS pg_trgm;')
+    @DB.run('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;') # Required for levenshtein
+    puts 'Ensuring pg_trgm extension is enabled.'
+
+    # A GIN (Generalized Inverted Index) with trigram operations is the most
+    # effective way to speed up ILIKE queries with leading wildcards (e.g., '%text%').
+    # We check if the indexes exist before attempting to create them.
+    # We use 'CREATE INDEX IF NOT EXISTS' to let the database handle creation safely.
+    # This is idempotent and avoids errors if the indexes already exist.
+    puts 'Ensuring required database extensions and indexes exist...'
+    @DB.run('CREATE INDEX IF NOT EXISTS books_title_lower_trgm_idx ON books USING gin (lower(title) gin_trgm_ops);')
+    @DB.run('CREATE INDEX IF NOT EXISTS books_author_lower_trgm_idx ON books USING gin (lower(author) gin_trgm_ops);')
+    @DB.run('CREATE INDEX IF NOT EXISTS books_read_by_lower_trgm_idx ON books USING gin (lower(read_by) gin_trgm_ops);')
+
+    # Create a helper function and index for last name searches.
+    # This makes fuzzy author searches much more accurate and performant.
+    @DB.run("
+      CREATE OR REPLACE FUNCTION get_last_name(full_name text) RETURNS text AS $$
+      BEGIN
+        IF position(',' in full_name) > 0 THEN
+          RETURN trim(split_part(full_name, ',', 1));
+        ELSE
+          RETURN (string_to_array(trim(full_name), ' '))[array_upper(string_to_array(trim(full_name), ' '), 1)];
+        END IF;
+      END;
+      $$ LANGUAGE plpgsql IMMUTABLE;
+    ")
+    @DB.run('CREATE INDEX IF NOT EXISTS books_last_name_trgm_idx ON books USING gin (lower(get_last_name(author)) gin_trgm_ops);')
+    puts 'Last name search function and index are configured.'
   end
 end

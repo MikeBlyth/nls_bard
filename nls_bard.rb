@@ -26,7 +26,10 @@ require 'dotenv/load'
 @book_number = 0
 
 def download(key)
-  return puts "Invalid key format: '#{key}'. Not a standard book ID." unless key =~ /\A[A-Z]{1,3}[0-9]+\z/
+  # Validate the key format case-insensitively.
+  return puts "Invalid key format: '#{key}'. Not a standard book ID." unless key =~ /\A[A-Z]{1,3}[0-9]+\z/i
+
+  key.upcase! # Convert to uppercase for consistency with BARD URLs and internal usage.
 
   BardSessionManager.initialize_nls_bard_chromium
   driver = BardSessionManager.nls_driver
@@ -283,27 +286,27 @@ def update_years # Try to find publication year for DB entries which don't have 
   end
 end
 
-#### NEED TO SIMPLIFY/COMBINE THESE SEARCH/LIST METHODS IF WE GO FURTHER
-def list_books_w_matching_title(title)
-  books = @mybooks.get_books_by_title(title)
-  books.each { |book| puts "#{book[:key]} | #{book[:author]}, #{book[:title]}" }
-end
-
-def list_books_w_matching_author(author)
-  books = @mybooks.get_books_by_author(author)
-  books.each { |book| puts "#{book[:key]} | #{book[:author]}, #{book[:title]}" }
-end
-
-def list_books_by_filter(filter)
+def list_books_by_filter(filter, options)
   if filter[:title] + filter[:author] + filter[:blurb] + filter[:key] == ''
     puts 'No title, author, key, or blurb specified'
     return
   end
-  books = @mybooks.get_by_hash(filter)
+
+  books = if (filter[:key] || '') > ''
+            # If a specific key is provided, perform a direct lookup.
+            @mybooks.get_book(filter[:key])
+          elsif options.fuzzy
+            # Otherwise, perform a fuzzy or standard search.
+            puts 'Performing fuzzy search...'
+            @mybooks.get_by_hash_fuzzy(filter)
+          else
+            @mybooks.get_by_hash(filter)
+          end
+
   #	books.each {|book| puts "#{book[:key]} | #{book[:author]}, #{book[:title]}"}
   if books
     if $verbose
-      books.each do |book_hash|
+      Array(books).each do |book_hash| # Wrap in Array() to handle single book result
         book = Book.new(book_hash) # {screen_output}"
         book.display(screen_output) # Book needs to know how to format, for screen or a file
         puts ''
@@ -455,7 +458,7 @@ def handle_command(command_line)
     #		pp $stdout, @original_stdout, ($stdout == @original_stdout), ($stdout === @original_stdout)
   end
 
-  list_books_by_filter(filters) if options.find && filters.count > 0
+  list_books_by_filter(filters, options) if options.find && filters.count > 0
 
   if options.wish
     author = filters[:author]

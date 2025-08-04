@@ -1,43 +1,54 @@
-# Use a specific, slim version of the Ruby image for a smaller footprint
+# Use the same base image as the development Dockerfile for consistency.
 FROM ruby:3.3.1-slim
 
-# Install necessary dependencies for building gems (like nokogiri and pg)
-# and for running the application (like chromium for selenium)
-RUN apt-get update -qq && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    chromium \
-    chromium-driver \
-    && rm -rf /var/lib/apt/lists/*
+# Install essential Linux packages, Chrome, and ChromeDriver in a single layer.
+# This mirrors the development setup for maximum stability and compatibility.
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        wget \
+        gnupg \
+        curl \
+        unzip \
+        jq \
+        libnss3 libgconf-2-4 libfontconfig1 libxss1 fonts-liberation && \
+    # Add Google Chrome repository and install
+    wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update -qq && \
+    apt-get install -y --no-install-recommends google-chrome-stable && \
+    # Install matching ChromeDriver using Chrome for Testing API
+    LATEST_VERSION=$(curl -sS "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json" | jq -r '.channels.Stable.version') && \
+    wget -O /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${LATEST_VERSION}/linux64/chromedriver-linux64.zip" && \
+    unzip /tmp/chromedriver.zip -d /tmp/ && \
+    mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
+    chmod +x /usr/local/bin/chromedriver && \
+    rm -rf /tmp/chromedriver* && \
+    # Clean up apt caches to reduce image size
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user to run the application for better security
-RUN useradd --create-home --shell /bin/bash appuser
+# Set environment variables for the container.
+ENV LANG C.UTF-8
+ENV APP_HOME /app
 
-# Set the working directory in the container
-WORKDIR /app
+# Create a non-root user to run the application for better security.
+RUN useradd -m -d /home/appuser -s /bin/bash appuser
 
-# Copy Gemfile and Gemfile.lock to leverage Docker's layer caching.
-# This step will only be re-run if these files change.
-COPY Gemfile Gemfile.lock ./
+# Create the application directory and set ownership before copying files.
+RUN mkdir -p $APP_HOME && chown -R appuser:appuser $APP_HOME
+WORKDIR $APP_HOME
 
-# Install gems, excluding development and test groups.
-# The --jobs flag can speed up the process.
-RUN bundle config set --local without 'development:test' && \
-    bundle install --jobs=$(nproc) --retry 3
+# Copy Gemfile and install gems as the non-root user.
+# This is more secure and avoids permission issues.
+USER appuser
+COPY --chown=appuser:appuser Gemfile Gemfile.lock ./
+RUN gem install bundler && bundle install --jobs $(nproc) --retry 3
 
-# Copy the rest of the application code into the container
+# Copy the rest of the application code into the image.
+# The user is already 'appuser', so files will have correct ownership.
 COPY . .
 
-# Change ownership of the app directory to the non-root user
-RUN chown -R appuser:appuser /app
-
-# Switch to the non-root user
-USER appuser
-
-# Set the entrypoint to run the application.
-# This allows `docker run nls-bard-prod -f -t "Dune"` to work.
+# The ENTRYPOINT will run as the 'appuser'.
 ENTRYPOINT ["ruby", "nls_bard.rb"]
-
-# The default command if no arguments are provided.
-# This will start the interactive prompt.
-CMD []

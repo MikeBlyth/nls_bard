@@ -219,7 +219,7 @@ This is the format of a single book entry on the BARD2 pages.
                 <span>Title of Item</span>
             </a>
         </h4>
-        
+
         <div class="item-details-meta-container">
             <p data-testid="detail-value-p-author">
                 <b data-testid="detail-value-b-author" class="author">Author: </b>Author Name
@@ -234,11 +234,11 @@ This is the format of a single book entry on the BARD2 pages.
                 <b data-testid="detail-value-b-subjects" class="subjects">Subjects: </b>Subject Categories
             </p>
         </div>
-        
+
         <p class="annotation">Description text content goes here.</p>
-        
+
         <p class="publishers">Publisher Information</p>
-        
+
         <div class="item-details-button-dropdown">
             <details id="button-dropdown-cta-buttons" class="button-dropdown">
                 <summary role="button" aria-label="Take Action" class="button-dropdown-summary">

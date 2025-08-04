@@ -44,6 +44,14 @@ module BardSessionManager
     options.add_argument('--v=1')
     options.add_argument('--enable-chrome-logs')
 
+    # Explicitly set the download directory to ensure files are saved to the mounted volume.
+    # This removes ambiguity and makes the download behavior reliable.
+    download_path = ENV.fetch('CONTAINER_DOWNLOAD_PATH', '/app/downloads') # Default fallback
+    prefs = {
+      download: { default_directory: download_path, prompt_for_download: false }
+    }
+    options.add_preference(:prefs, prefs)
+
     # Enable performance logging
     options.add_option('goog:loggingPrefs', { performance: 'ALL', browser: 'ALL' })
     service = Selenium::WebDriver::Chrome::Service.new

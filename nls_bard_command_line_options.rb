@@ -18,6 +18,7 @@ class Optparse
     options.blurb = ''
     options.find = false
     options.marked = false
+    options.fuzzy = false
     options.output = ''
     options.mark = []
     options.unmark = []
@@ -45,6 +46,11 @@ class Optparse
       # Find
       opts.on('-f', '--find', 'Find in database (use title, author, and/or blurb') do |f|
         options.find = true
+      end
+
+      # Fuzzy find
+      opts.on('--fuzzy', 'Use fuzzy matching for find (finds misspellings)') do |_f|
+        options.fuzzy = true
       end
 
       # Summary
