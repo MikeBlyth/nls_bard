@@ -43,59 +43,23 @@ class Book < Hash
     puts
   end
 
-  def first_name_first(author = '')
-    # if author =~ /([^,]+*), ([^;]+)(; .*)/
-    # Try /([^,]+), ([^;]+)(, ((I+)|(Jr\.)))(; .*)?/ matches when Jr. or II but not otherwise. Adding ? makes Jr. get absorbed
-  end
-
-  def initialize(values = { title: '', author: '', categories: '', blurb: '', key: '', stars: 0, ratings: 0 })
-    return if values.nil?
-
-    if values.is_a? Hash
-      values.each { |key, value| self[key] = value }
-    else # Load a string with fixed order of fields
-      book_a = values.split('|')
-      @@fields.each do |field|
-        self[field] = (book_a || []).shift
-      end
-    end
+  # Initializes a Book object from a hash of attributes.
+  def initialize(values = {})
+    # Directly assign hash values. The default empty hash prevents errors.
+    values.each { |key, value| self[key] = value }
     post_initialize
   end
 
-  def add_category(category)
-    @category_array << category
-    if self[:categories] > ''
-      self[:categories] += '; ' + category
-    else
-      self[:categories] = category
-    end
-  end
+  # Creates a new Book instance by parsing a pipe-delimited string.
+  def self.from_string(pipe_string)
+    return new if pipe_string.nil?
 
-  def flatten_categories
-    self[:categories] = self[:categories].to_a.join(', ')
-    self[:reading_time] = self[:reading_time].to_f
-    self
-  end
-
-  def post_initialize
-    self[:author] = ::Regexp.last_match(1) if self[:author] =~ /(.*);/
-    self[:author] = ::Regexp.last_match(1) if self[:author] =~ /(.*[a-z])\.$/
-    self[:blurb].chomp!
-    blurb = self[:blurb]
-    if blurb =~ /\. +For ((grades [Kk0-9-]*)|(junior.*)|(senior.*)|(preschool.*)|(kindergarten.*)).$/
-      self[:target_age] = ::Regexp.last_match(1)
+    book_hash = {}
+    book_a = pipe_string.split('|')
+    @@fields.each do |field|
+      book_hash[field] = (book_a || []).shift
     end
-    self[:awards] = ::Regexp.last_match(1) if blurb =~ /\. ([^.]*(Award|Prize)[^.]*)\. ([0-9]{4})\./ # Prizes, Awards
-    self[:year] = ::Regexp.last_match(1) if blurb =~ /\. +([0-9]{4})\./
-    self[:product] = 'commercial audiobook' if blurb =~ /commercial audiobook/i
-    self[:language] = 'English'
-    self[:language] = ::Regexp.last_match(1) if blurb =~ /\. ([A-Z]\w+) language\./
-    self[:categories].sub!(/A production of.*\.,? */, '') # This sometimes pollutes the categories string
-    @category_array = (self[:categories] || '').split('; ')
-    @category_array.each do |category|
-      self[:language] = ::Regexp.last_match(1) if category =~ /(.*) language/i
-    end
-    self[:date_added] = Date.today
+    new(book_hash)
   end
 
   def get_rating # look up rating on Goodreads or other service
@@ -114,20 +78,53 @@ class Book < Hash
 
     self[:goodreads_title] = 'no match xxx'
   end
+
+  private
+
+  # This method is called after initialization to parse and clean up attributes.
+  def post_initialize
+    # Ensure essential keys have default values to prevent nil errors downstream.
+    self[:key] ||= ''
+    self[:author] ||= ''
+    self[:blurb] ||= ''
+    self[:categories] ||= ''
+
+    self[:key].strip! # Ensure the book's key has no leading/trailing whitespace.
+
+    clean_author_name
+    parse_attributes_from_blurb
+    parse_categories
+    self[:date_added] ||= Date.today
+  end
+
+  def clean_author_name
+    # Remove trailing semicolons or periods from author names.
+    self[:author] = ::Regexp.last_match(1) if self[:author] =~ /(.*);/
+    self[:author] = ::Regexp.last_match(1) if self[:author] =~ /(.*[a-z])\.$/
+  end
+
+  def parse_attributes_from_blurb
+    blurb = self[:blurb].chomp
+    # These regexes extract structured data from the unstructured blurb text.
+    if blurb =~ /\. +For ((grades [Kk0-9-]*)|(junior.*)|(senior.*)|(preschool.*)|(kindergarten.*)).$/
+      self[:target_age] ||= ::Regexp.last_match(1)
+    end
+    self[:awards] ||= ::Regexp.last_match(1) if blurb =~ /\. ([^.]*(Award|Prize)[^.]*)\. ([0-9]{4})\./
+    self[:year] ||= ::Regexp.last_match(1) if blurb =~ /\. +([0-9]{4})\./
+    self[:product] ||= 'commercial audiobook' if blurb =~ /commercial audiobook/i
+    self[:language] ||= 'English'
+    self[:language] = ::Regexp.last_match(1) if blurb =~ /\. ([A-Z]\w+) language\./
+  end
+
+  def parse_categories
+    # Clean up the categories string and create a clean array of category names.
+    self[:categories].sub!(/A production of.*\.,? */, '') # This sometimes pollutes the categories string
+    # The BARD site uses commas to separate categories. Split by comma, then strip whitespace from each item.
+    # The reject(&:empty?) handles cases of trailing commas or empty strings.
+    @category_array = (self[:categories] || '').split(',').map(&:strip).reject(&:empty?)
+    # Also extract language if it's listed as a category.
+    @category_array.each do |category|
+      self[:language] = ::Regexp.last_match(1) if category =~ /(.*) language/i
+    end
+  end
 end
-
-# configure selenium for chrome
-def init_chromium_driver
-  options = Selenium::WebDriver::Chrome::Options.new
-  options.add_argument('--ignore-certificate-errors')
-  options.add_argument('--disable-popup-blocking')
-  options.add_argument('--disable-translate')
-  options.add_argument('--headless')
-  options.add_argument('--disable-gpu')
-  # options.add_argument('--no-sandbox')
-  # options.add_argument('--disable-dev-shm-usage')
-
-  Selenium::WebDriver.for :chrome, options:
-end
-
-

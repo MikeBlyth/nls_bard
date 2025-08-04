@@ -1,17 +1,4 @@
-# Copy this file to /usr/local/bin
-
 #!/bin/bash
-
-# Default arguments if none are provided
-DEFAULT_ARGS="-f -t 'x12xxx'"
-
-# Check if arguments are provided
-if [ $# -eq 0 ]; then
-    ARGS="$DEFAULT_ARGS"
-else
-    ARGS="$@"
-fi
-
-# Run the docker-compose command with the appropriate arguments
-/mnt/d/users/mike/nls_bard
-docker-compose run --rm app ruby nls_bard.rb $ARGS
+# Pass all arguments ("$@") directly to the application inside the container.
+# The app will show help or start the REPL if no arguments are given.
+docker-compose run --rm app ruby nls_bard.rb "$@"

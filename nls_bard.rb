@@ -140,6 +140,7 @@ end
 def iterate_pages(start_letter)
   BardSessionManager.initialize_nls_bard_chromium
   driver = BardSessionManager.nls_driver
+  @processed_keys_this_session = Set.new # Track keys processed in this run to handle duplicates across pages.
 
   letters = (start_letter..'Z').to_a
   letters.each do |letter|
@@ -176,6 +177,7 @@ end
 
 def iterate_update_pages(days)
   BardSessionManager.initialize_nls_bard_chromium
+  @processed_keys_this_session = Set.new # Track keys processed in this run to handle duplicates across pages.
 
   # Navigate to the initial "recently added" page.
   # The `days` parameter is noted as not working for the new site.
@@ -216,11 +218,19 @@ def process_book_entry(entry)
   book = process_entry(entry) # entry is now a Nokogiri element
   return unless book # Skip if entry couldn't be parsed into a book
 
-  if @mybooks.book_exists?(book[:key])
-    update_existing_book(book)
-  else
-    add_new_book(book)
-  end
+  # Prevent processing the same book twice in one session if it appears on multiple pages.
+  # This can happen on the "recently added" pages.
+  return if @processed_keys_this_session&.include?(book[:key])
+
+  # We only want to process and add books that are new to our database.
+  # If a book already exists, we skip it to avoid unnecessary processing
+  # like fetching ratings or performing database updates. The `insert_book` method
+  # uses an "INSERT ... ON CONFLICT DO NOTHING" as a final safety net in case
+  # this check fails, preventing a crash and leaving the existing record untouched.
+  add_new_book(book) unless @mybooks.book_exists?(book[:key])
+
+  # Add the key to the set of processed keys for this session.
+  @processed_keys_this_session&.add(book[:key])
 end
 
 def add_new_book(book)

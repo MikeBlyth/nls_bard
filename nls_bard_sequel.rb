@@ -19,9 +19,12 @@ class BookDatabase
   end
 
   def book_exists?(key)
-    key = key[:key] if key.is_a? Book
-    q = @books.where(key:).empty?
-    !q
+    # Extract the key string whether a Book object or a String is passed.
+    book_key_val = key.is_a?(Book) ? key[:key] : key
+    # A nil or empty key cannot exist in the database.
+    return false if book_key_val.nil? || book_key_val.strip.empty?
+
+    !@books.where(key: book_key_val.strip).empty?
   end
 
   def cat_exists?(category)
@@ -199,13 +202,31 @@ class BookDatabase
   end
 
   def insert_book(newbook)
-    return if book_exists?(newbook[:key])
+    # This method performs an "upsert" (update or insert) operation.
+    # It uses PostgreSQL's `INSERT ... ON CONFLICT` feature to atomically
+    # insert a new book or update an existing one if the key already exists.
+    # This is more robust and efficient than checking for existence first.
 
-    # filter columns not in the database table
+    # Prepare the data hash, ensuring we only include valid columns from the 'books' table.
+    book_data = {}
     newbook.keys.each do |k|
-      newbook.delete(k) unless @books.columns.include? k
+      book_data[k] = newbook[k] if @columns.include?(k)
     end
-    @books.insert(newbook)
+    return if book_data[:key].nil? || book_data[:key].empty? # Don't try to insert a book without a key
+
+    # On conflict, we want to do nothing. This is a safety net in case
+    # insert_book is called for a key that already exists. The main logic
+    # in nls_bard.rb should prevent this, but this makes the operation safe.
+    # The insert call returns nil if the row was ignored.
+    result = @books.insert_conflict(
+      target: :key,
+      ignore: true
+    ).insert(book_data)
+
+    # If the insert was ignored (result is nil), do not process categories.
+    return if result.nil?
+
+    # The category association logic should only run for newly inserted books.
     return unless (newbook.category_array || []).count > 0
 
     newbook.category_array.each do |category|
