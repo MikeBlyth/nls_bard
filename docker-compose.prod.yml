@@ -1,5 +1,4 @@
-name: 'nls-bard'
-version: '3.8'
+name: 'nls-bard-prod' # Unique name for the production environment
 
 x-comment: |
   This is the docker-compose file for PRODUCTION.
@@ -35,14 +34,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       NLS_BARD_USERNAME: ${NLS_BARD_USERNAME}
       NLS_BARD_PASSWORD: ${NLS_BARD_PASSWORD}
+      CONTAINER_DOWNLOAD_PATH: /home/appuser/Downloads
     volumes:
-      # Use a named volume for downloads. The path inside the container
-      # matches the home directory of the 'appuser' created in Dockerfile.prod.
-      - downloads:/home/appuser/Downloads
+      # Mount the host's download path into the container for consistency with dev.
+      - ${WIN_DOWNLOADS_PATH}:/home/appuser/Downloads
     restart: unless-stopped
 
 volumes:
   postgres_data:
     name: nls_bard_postgres_data
     external: true
-  downloads:
