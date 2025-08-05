@@ -329,17 +329,23 @@ class BookDatabase
   private
 
   def setup_database_indexes
-    # Enable the pg_trgm extension required for efficient text searching.
-    @DB.run('CREATE EXTENSION IF NOT EXISTS pg_trgm;')
-    @DB.run('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;') # Required for levenshtein
-    puts 'Ensuring pg_trgm extension is enabled.'
+    # Enable required extensions. Using `IF NOT EXISTS` is best practice.
+    # We also wrap this in a rescue block as a final safeguard against
+    # potential race conditions or unusual transaction states.
+    begin
+      # Explicitly create extensions in the public schema to ensure they are always in the search_path.
+      @DB.run('CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;')
+      @DB.run('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;')
+    rescue Sequel::DatabaseError => e
+      # This can happen in a race condition. It's safe to ignore if the error
+      # is a unique constraint violation on the pg_extension table, which
+      # indicates another process created the extension after this one checked.
+      raise unless e.message.include?('duplicate key') && e.message.include?('pg_extension_name_index')
+    end
 
-    # A GIN (Generalized Inverted Index) with trigram operations is the most
-    # effective way to speed up ILIKE queries with leading wildcards (e.g., '%text%').
-    # We check if the indexes exist before attempting to create them.
+    puts 'Ensuring required database extensions and indexes exist...'
     # We use 'CREATE INDEX IF NOT EXISTS' to let the database handle creation safely.
     # This is idempotent and avoids errors if the indexes already exist.
-    puts 'Ensuring required database extensions and indexes exist...'
     @DB.run('CREATE INDEX IF NOT EXISTS books_title_lower_trgm_idx ON books USING gin (lower(title) gin_trgm_ops);')
     @DB.run('CREATE INDEX IF NOT EXISTS books_author_lower_trgm_idx ON books USING gin (lower(author) gin_trgm_ops);')
     @DB.run('CREATE INDEX IF NOT EXISTS books_read_by_lower_trgm_idx ON books USING gin (lower(read_by) gin_trgm_ops);')

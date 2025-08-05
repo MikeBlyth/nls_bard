@@ -5,3 +5,6 @@
 *.dot
 *.png
 *.backup
+/output/
+/db_dump/
+db_dump/database_dump.sql.zip.old

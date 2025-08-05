@@ -56,7 +56,7 @@ ENV PATH="/home/chrome/.gems/bin:$PATH"
 
 # Create necessary directories and set ownership before switching user.
 # The user 'chrome' now exists, so this will succeed.
-RUN mkdir -p /app/db_dump /home/chrome/.cache/selenium ${GEM_HOME} && \
+RUN mkdir -p /app/db_dump /app/output /home/chrome/.cache/selenium ${GEM_HOME} && \
     chown -R chrome:chrome /app /home/chrome
 
 # Switch to the non-root user for all subsequent commands

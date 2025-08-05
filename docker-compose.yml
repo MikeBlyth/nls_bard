@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: nlsbard
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /home/mike/postgres-data:/var/lib/postgresql/data  # Direct path
       - ./db_dump:/db_dump
     restart: unless-stopped
   app:
@@ -39,7 +39,4 @@ services:
     # Ensure stdin is kept open for interactive `docker-compose run` commands.
     stdin_open: true
 
-volumes:
-  postgres_data:
-    name: nls_bard_postgres_data
-    external: true
+

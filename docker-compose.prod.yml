@@ -16,7 +16,7 @@ services:
       POSTGRES_USER: mike
       POSTGRES_DB: nlsbard
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /home/mike/postgres-data:/var/lib/postgresql/data  # Direct path
     restart: unless-stopped
 
   app:
@@ -39,8 +39,3 @@ services:
       # Mount the host's download path into the container for consistency with dev.
       - ${WIN_DOWNLOADS_PATH}:/home/appuser/Downloads
     restart: unless-stopped
-
-volumes:
-  postgres_data:
-    name: nls_bard_postgres_data
-    external: true

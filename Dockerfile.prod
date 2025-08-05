@@ -37,7 +37,7 @@ ENV APP_HOME /app
 RUN useradd -m -d /home/appuser -s /bin/bash appuser
 
 # Create the application directory and set ownership before copying files.
-RUN mkdir -p $APP_HOME && chown -R appuser:appuser $APP_HOME
+RUN mkdir -p $APP_HOME/output && chown -R appuser:appuser $APP_HOME
 WORKDIR $APP_HOME
 
 # Copy Gemfile and install gems as the non-root user.

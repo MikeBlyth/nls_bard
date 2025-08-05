@@ -123,9 +123,9 @@ def parse_reading_time(time_str)
 end
 
 def get_resume_mark
-  return(['A', 1]) unless File.exist?('nls_bard_bookmark.txt')
+  return(['A', 1]) unless File.exist?('output/nls_bard_bookmark.txt')
 
-  f = File.open('nls_bard_bookmark.txt', 'r')
+  f = File.open('output/nls_bard_bookmark.txt', 'r')
   letter, page = f.readlines
   f.close
   letter = (letter || 'A')[0]
@@ -134,7 +134,7 @@ def get_resume_mark
 end
 
 def save_resume_mark(letter, page)
-  f = File.open('nls_bard_bookmark.txt', 'w')
+  f = File.open('output/nls_bard_bookmark.txt', 'w')
   f.puts(letter, page)
   f.close
   nil
@@ -266,12 +266,12 @@ def read_all
     raise 'Entire catalog already read. Delete nls_bard_bookmark.txt and re-run if you want another pass.'
   end
 
-  @outfile = File.open('nls_bard_books.txt', 'a') # append to existing file
+  @outfile = File.open('output/nls_bard_books.txt', 'a') # append to existing file
   iterate_pages(letter)
 end
 
 def read_updates(days)
-  @outfile = File.open('nls_bard_books_updates.txt', 'a') # append to existing file
+  @outfile = File.open('output/nls_bard_books_updates.txt', 'a') # append to existing file
   iterate_update_pages(days)
 end
 
