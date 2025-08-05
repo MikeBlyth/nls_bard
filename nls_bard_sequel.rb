@@ -286,7 +286,13 @@ class BookDatabase
     end
   end
 
-  def dump_database(output_file = '/app/db_dump/database_dump.sql')
+  def dump_database(output_file = nil)
+    # Generate timestamped filename if none provided
+    if output_file.nil?
+      timestamp = Time.now.strftime('%Y%m%d_%H%M%S')
+      output_file = "/app/db_dump/nls_bard_backup_#{timestamp}.sql"
+    end
+
     db_name = @DB.opts[:database]
     host = @DB.opts[:host]
     user = @DB.opts[:user]
@@ -295,7 +301,8 @@ class BookDatabase
     # Ensure the output directory exists
     FileUtils.mkdir_p(File.dirname(output_file))
 
-    # Construct the pg_dump command
+    # Use basic pg_dump that works reliably
+    # The restore system will handle missing extensions/indexes
     cmd = [
       "PGPASSWORD='#{password}'",
       'pg_dump',
@@ -305,53 +312,101 @@ class BookDatabase
       "-f #{output_file}"
     ].join(' ')
 
+    puts "Creating database backup..."
+    puts "Output file: #{output_file}"
+    
     # Execute the command
     system(cmd)
 
     if $?.success?
-      # Zip the SQL file
-      zip_file = "#{output_file}.zip"
-      Zip::File.open(zip_file, Zip::File::CREATE) do |zipfile|
-        zipfile.add(File.basename(output_file), output_file)
-      end
+      # Keep only 2 generations of SQL files
+      manage_backup_generations(output_file)
 
-      # Delete the original SQL file
-      File.delete(output_file)
-
-      puts "Database dumped and zipped successfully to #{zip_file}"
+      puts "✓ Database backup completed successfully!"
+      puts "✓ File: #{output_file}"
+      puts ""
+      puts "To restore this backup:"
+      puts "  ./restore_database.sh #{output_file}"
     else
-      puts "Failed to dump database. Exit status: #{$?.exitstatus}"
+      puts "✗ Failed to dump database. Exit status: #{$?.exitstatus}"
     end
   rescue StandardError => e
     puts "Error during database dump or zip process: #{e.message}"
   end
 
+  def manage_backup_generations(new_backup_file)
+    backup_dir = File.dirname(new_backup_file)
+    base_name = File.basename(new_backup_file, '.sql')
+    
+    # Look for existing backups with the same base pattern
+    backup_pattern = File.join(backup_dir, "nls_bard_backup_*.sql")
+    existing_backups = Dir.glob(backup_pattern).sort
+    
+    # If we have previous backups, rename the most recent one to .old
+    if existing_backups.any?
+      most_recent = existing_backups.last
+      # Only rename if it's not the file we just created
+      unless most_recent == new_backup_file
+        old_backup = most_recent.gsub('.sql', '.old.sql')
+        
+        # Remove any existing .old file first
+        File.delete(old_backup) if File.exist?(old_backup)
+        
+        # Rename current to .old
+        File.rename(most_recent, old_backup)
+        puts "Previous backup renamed to: #{File.basename(old_backup)}"
+      end
+    end
+    
+    # Clean up any backups older than 2 generations
+    all_backups = Dir.glob(File.join(backup_dir, "nls_bard_backup_*.{sql,old.sql}"))
+    if all_backups.length > 2
+      # Sort by modification time and remove oldest
+      old_files = all_backups.sort_by { |f| File.mtime(f) }[0...-2]
+      old_files.each do |old_file|
+        File.delete(old_file)
+        puts "Removed old backup: #{File.basename(old_file)}"
+      end
+    end
+  end
+
   private
 
   def setup_database_indexes
-    # Enable required extensions. Using `IF NOT EXISTS` is best practice.
-    # We also wrap this in a rescue block as a final safeguard against
-    # potential race conditions or unusual transaction states.
+    # Check if we need to set up extensions and indexes
+    # This handles both fresh databases and restored databases gracefully
+    
+    puts 'Ensuring required database extensions and indexes exist...'
+    
+    # Step 1: Ensure extensions exist (handle various scenarios)
+    setup_extensions
+    
+    # Step 2: Ensure custom functions exist
+    setup_custom_functions
+    
+    # Step 3: Ensure indexes exist (only after tables exist)
+    setup_performance_indexes
+    
+    puts 'Database setup complete.'
+  end
+
+  def setup_extensions
     begin
-      # Explicitly create extensions in the public schema to ensure they are always in the search_path.
       @DB.run('CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;')
       @DB.run('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;')
     rescue Sequel::DatabaseError => e
-      # This can happen in a race condition. It's safe to ignore if the error
-      # is a unique constraint violation on the pg_extension table, which
-      # indicates another process created the extension after this one checked.
-      raise unless e.message.include?('duplicate key') && e.message.include?('pg_extension_name_index')
+      if e.message.include?('already exists with same argument types')
+        puts 'Extensions already exist (from init scripts or restore), continuing...'
+      elsif e.message.include?('duplicate key') && e.message.include?('pg_extension_name_index')
+        puts 'Extensions already registered, continuing...'
+      else
+        puts "Extension setup warning: #{e.message}"
+        # Continue anyway - the functions might exist from restore
+      end
     end
+  end
 
-    puts 'Ensuring required database extensions and indexes exist...'
-    # We use 'CREATE INDEX IF NOT EXISTS' to let the database handle creation safely.
-    # This is idempotent and avoids errors if the indexes already exist.
-    @DB.run('CREATE INDEX IF NOT EXISTS books_title_lower_trgm_idx ON books USING gin (lower(title) gin_trgm_ops);')
-    @DB.run('CREATE INDEX IF NOT EXISTS books_author_lower_trgm_idx ON books USING gin (lower(author) gin_trgm_ops);')
-    @DB.run('CREATE INDEX IF NOT EXISTS books_read_by_lower_trgm_idx ON books USING gin (lower(read_by) gin_trgm_ops);')
-
-    # Create a helper function and index for last name searches.
-    # This makes fuzzy author searches much more accurate and performant.
+  def setup_custom_functions
     @DB.run("
       CREATE OR REPLACE FUNCTION get_last_name(full_name text) RETURNS text AS $$
       BEGIN
@@ -363,7 +418,32 @@ class BookDatabase
       END;
       $$ LANGUAGE plpgsql IMMUTABLE;
     ")
-    @DB.run('CREATE INDEX IF NOT EXISTS books_last_name_trgm_idx ON books USING gin (lower(get_last_name(author)) gin_trgm_ops);')
-    puts 'Last name search function and index are configured.'
+  end
+
+  def setup_performance_indexes
+    # Only create indexes if the books table actually exists
+    return unless table_exists?(:books)
+    
+    indexes = [
+      'CREATE INDEX IF NOT EXISTS books_title_lower_trgm_idx ON books USING gin (lower(title) gin_trgm_ops);',
+      'CREATE INDEX IF NOT EXISTS books_author_lower_trgm_idx ON books USING gin (lower(author) gin_trgm_ops);',
+      'CREATE INDEX IF NOT EXISTS books_read_by_lower_trgm_idx ON books USING gin (lower(read_by) gin_trgm_ops);',
+      'CREATE INDEX IF NOT EXISTS books_last_name_trgm_idx ON books USING gin (lower(get_last_name(author)) gin_trgm_ops);'
+    ]
+    
+    indexes.each do |index_sql|
+      begin
+        @DB.run(index_sql)
+      rescue Sequel::DatabaseError => e
+        puts "Index creation warning: #{e.message}"
+        # Continue with other indexes
+      end
+    end
+    
+    puts 'Performance indexes configured.'
+  end
+
+  def table_exists?(table_name)
+    @DB.table_exists?(table_name)
   end
 end

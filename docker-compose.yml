@@ -9,6 +9,7 @@ services:
     volumes:
       - /home/mike/postgres-data:/var/lib/postgresql/data  # Direct path
       - ./db_dump:/db_dump
+      - ./db_init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on empty database
     restart: unless-stopped
   app:
     build:

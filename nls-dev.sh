@@ -23,5 +23,5 @@ else
   COMMAND_TO_RUN=("ruby" "nls_bard.rb" "$@")
 fi
 
-# Build the image if it's out of date and then run the constructed command.
-docker-compose run --build --rm app "${COMMAND_TO_RUN[@]}"
+# Run the constructed command in the container.
+docker-compose run --rm app "${COMMAND_TO_RUN[@]}"

@@ -12,6 +12,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 # Ensure we are in the project root so docker-compose can find its files.
 cd "$SCRIPT_DIR"
 
-# Build the image if it's out of date and then run the command in a new container.
+# Run the command in a new container.
 # All script arguments ("$@") are passed to the container.
-docker-compose -f docker-compose.prod.yml run --build --rm app "$@"
+docker-compose -f docker-compose.prod.yml run --rm app "$@"

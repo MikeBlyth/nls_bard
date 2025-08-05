@@ -31,7 +31,8 @@ Run these inside the container or via the shell scripts:
 - **Check wishlist**: `ruby nls_bard.rb -w`
 - **Download book**: `ruby nls_bard.rb -d DB123456`
 - **Update ratings**: `ruby nls_bard.rb -u`
-- **Backup database**: `ruby nls_bard.rb --backup`
+- **Backup database**: `ruby nls_bard.rb --backup` or `./backup_database.sh`
+- **Restore database**: `./restore_database.sh <backup_file.sql>`
 
 ### Testing and Quality
 - **Run RSpec tests**: `bundle exec rspec`
@@ -77,7 +78,9 @@ HOST_GID=1001
 - **Download Handling**: Books download to the mapped Windows Downloads folder
 - **Session Management**: WebDriver sessions are reused for efficiency
 - **Fuzzy Search**: Database includes fuzzy matching for book searches
-- **Case Insensitive**: Book IDs are handled case-insensitively but stored uppercase
+- **Case Insensitive**: Book IDs are handled case-insensitive but stored uppercase
+- **Database Setup**: Automatic initialization handles extensions, functions, and indexes
+- **Backup/Restore**: Use provided scripts for reliable database backup and restoration
 
 ## File Structure Patterns
 
