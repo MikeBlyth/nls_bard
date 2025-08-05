@@ -18,6 +18,7 @@ This is a Ruby-based application that scrapes and manages audiobooks from the NL
 ### Container Management
 - **Development environment**: `./nls-dev.sh` or `./nls-dev.sh [command]`
 - **Production environment**: `./nls-prod.sh [command]`
+- **Rebuild production image**: `./rebuild-prod.sh` (required after code changes)
 - **Build containers**: `docker-compose build`
 - **Start database only**: `docker-compose up -d db`
 - **Interactive shell**: `docker-compose run --rm app /bin/bash`

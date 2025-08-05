@@ -191,7 +191,7 @@ class BookDatabase
 
   def list_wish # List the wishlist
     puts 'Wish list:'
-    @wish.order(:author, :title).each { |w| puts "\t#{w[:title]} by #{w[:author]}" }
+    @wish.order(:title).each { |w| puts "\t\"#{w[:title]}\" by #{w[:author]}" }
   end
 
   def wish_delete(hash)
