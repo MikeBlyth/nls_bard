@@ -12,11 +12,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 # Ensure we are in the project root so docker-compose can find its files.
 cd "$SCRIPT_DIR"
 
+COMMAND_TO_RUN=()
 if [ $# -eq 0 ]; then
   # If no arguments are provided, start an interactive bash session,
   # which is a useful default for development.
-  docker-compose run --build --rm app /bin/bash
+  COMMAND_TO_RUN=("/bin/bash")
 else
-  # If arguments are provided, execute them as a command inside the container.
-  docker-compose run --build --rm app "$@"
+  # If arguments are provided, prepend "ruby nls_bard.rb" to them
+  # to form a complete command to run inside the container.
+  COMMAND_TO_RUN=("ruby" "nls_bard.rb" "$@")
 fi
+
+# Build the image if it's out of date and then run the constructed command.
+docker-compose run --build --rm app "${COMMAND_TO_RUN[@]}"

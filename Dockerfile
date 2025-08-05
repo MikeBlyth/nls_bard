@@ -6,9 +6,15 @@ ARG CHROME_VERSION="126.0.6478.126"
 # the container user's permissions match the host user's, avoiding file
 # permission errors on mounted volumes.
 ARG UID=1000
-ARG GID=1000
+ARG GID=1001
 
-# Install essential Linux packages, Chrome, and ChromeDriver in a single layer to optimize build time and image size.
+# Create a non-root user 'chrome' with the host's UID/GID and set its shell.
+# This is the key to solving file permission issues with mounted volumes.
+# The -o flag allows for a non-unique UID, and -m creates the home directory.
+RUN groupadd -g ${GID} -o chrome && \
+    useradd -u ${UID} -g ${GID} -o -m -s /bin/bash chrome
+
+# Install essential Linux packages, Chrome, ChromeDriver, and Node.js in a single layer to optimize build time and image size.
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -39,24 +45,21 @@ RUN apt-get update -qq && \
     mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
     chmod +x /usr/local/bin/chromedriver && \
     rm -rf /tmp/chromedriver* && \
+    # Install Node.js 20.x
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     # Clean up apt caches to reduce image size
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user 'chrome' with the host's UID/GID and set its shell.
-# This is the key to solving file permission issues with mounted volumes.
-# The -o flag allows for a non-unique UID, and -m creates the home directory.
-RUN groupadd -g ${GID} -o chrome && \
-    useradd -u ${UID} -g ${GID} -o -m -s /bin/bash chrome
-
 # Set environment variables for the new user. This ensures gems are installed
 # in the user's home directory, avoiding permission issues inside the dev container.
 ENV GEM_HOME="/home/chrome/.gems"
-ENV PATH="/home/chrome/.gems/bin:$PATH"
+ENV PATH="/home/chrome/.gems/bin:/home/chrome/.npm-global/bin:$PATH"
 
 # Create necessary directories and set ownership before switching user.
 # The user 'chrome' now exists, so this will succeed.
-RUN mkdir -p /app/db_dump /app/output /home/chrome/.cache/selenium ${GEM_HOME} && \
+RUN mkdir -p /app/db_dump /app/output /home/chrome/.cache/selenium ${GEM_HOME} /home/chrome/.npm-global && \
     chown -R chrome:chrome /app /home/chrome
 
 # Switch to the non-root user for all subsequent commands
@@ -76,14 +79,18 @@ RUN gem install bundler && \
 
 COPY --chown=chrome:chrome . .
 
-RUN gem update rexml && gem cleanup rexml
+RUN gem update rexml && gem cleanup rexml && \
+    # Install Claude CLI with proper npm prefix for user
+    npm config set prefix ~/.npm-global && \
+    npm install -g @anthropic-ai/claude-code
 
 # The user's shell is already set to /bin/bash during creation.
 # The .bashrc setup is still useful for interactive sessions.
 RUN \
-    # Create or update a .bashrc file to enable command history
+    # Create or update a .bashrc file to enable command history and ensure PATH
     echo 'HISTSIZE=1000' >> /home/chrome/.bashrc && \
     echo 'HISTFILESIZE=2000' >> /home/chrome/.bashrc && \
-    echo 'PROMPT_COMMAND="history -a"' >> /home/chrome/.bashrc
+    echo 'PROMPT_COMMAND="history -a"' >> /home/chrome/.bashrc && \
+    echo 'export PATH="/home/chrome/.gems/bin:/home/chrome/.npm-global/bin:$PATH"' >> /home/chrome/.bashrc
     
 CMD ["ruby", "nls_bard.rb", "-h"]

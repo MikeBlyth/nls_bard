@@ -1,18 +1,14 @@
 version: '3.8'
-name: 'nls-bard-dev' # Unique project name for the dev container environment
+name: 'nls-bard-dev-container' # Unique project name for the dev container environment
 
 services:
-  # Update this to the name of the service you want to work with in your docker-compose.yml file
   app:
-    # Uncomment if you want to override the service's Dockerfile to one in the .devcontainer 
-    # folder. Note that the path of the Dockerfile and context is relative to the *primary* 
-    # docker-compose.yml file (the first in the devcontainer.json "dockerComposeFile"
-    # array). The sample below assumes your primary file is in the root of your project.
-    #
-    # build:
-    #   context: .
-    #   dockerfile: .devcontainer/Dockerfile
-
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - UID=${HOST_UID:-1000}
+        - GID=${HOST_GID:-1001}
     volumes:
       # Update this to wherever you want VS Code to mount the folder of your project
       - ..:/workspaces:cached
