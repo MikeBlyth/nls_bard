@@ -65,18 +65,45 @@ class Book < Hash
   def get_rating # look up rating on Goodreads or other service
     return if (self[:goodreads_title] || '').downcase == 'ignore'
 
-    rating = goodreadsRating(self) || {}
-    self[:stars_date] = Date.today # set date we last checked ratings
-    if rating[:match] # no match, don't change
-      self[:stars] = rating[:stars]
-      self[:ratings] = rating[:count]
-      self[:goodreads_title] = rating[:goodreads_title]
-      self[:goodreads_author] = rating[:goodreads_author]
-    end
-    self[:goodreads_title] = 'ignore' if rating[:goodreads_title] == 'ignore'
-    return unless rating[:match] == false
+    max_retries = 3
+    retry_count = 0
+    
+    begin
+      rating = goodreadsRating(self) || {}
+      self[:stars_date] = Date.today # set date we last checked ratings
+      if rating[:match] # no match, don't change
+        self[:stars] = rating[:stars]
+        self[:ratings] = rating[:count]
+        self[:goodreads_title] = rating[:goodreads_title]
+        self[:goodreads_author] = rating[:goodreads_author]
+      end
+      self[:goodreads_title] = 'ignore' if rating[:goodreads_title] == 'ignore'
+      return unless rating[:match] == false
 
-    self[:goodreads_title] = 'no match xxx'
+      self[:goodreads_title] = 'no match xxx'
+    rescue OpenSSL::SSL::SSLError, Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNRESET, SocketError => e
+      retry_count += 1
+      if retry_count <= max_retries
+        puts "Network error getting rating for '#{self[:title]}' (attempt #{retry_count}/#{max_retries}): #{e.class.name}"
+        sleep(2 * retry_count) # Exponential backoff: 2, 4, 6 seconds
+        retry
+      else
+        puts "\n" + "="*60
+        puts "FATAL: Failed to get rating for '#{self[:title]}' after #{max_retries} attempts"
+        puts "Error: #{e.message}"
+        puts "Goodreads data is critical and would be lost if scraping continues."
+        puts "Please check your network connection and try again later."
+        puts "="*60
+        exit(1)
+      end
+    rescue => e
+      puts "\n" + "="*60
+      puts "FATAL: Unexpected error getting rating for '#{self[:title]}'"
+      puts "Error: #{e.class.name} - #{e.message}"
+      puts "Scraping stopped to prevent data loss."
+      puts "="*60
+      exit(1)
+    end
   end
 
   private

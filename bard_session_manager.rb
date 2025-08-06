@@ -63,8 +63,11 @@ module BardSessionManager
     return if @logged_in
 
     login_page = 'https://nlsbard.loc.gov/bard2-web/login/'
-    @nls_driver.navigate.to login_page
+    max_retries = 3
+    retry_count = 0
+    
     begin
+      @nls_driver.navigate.to login_page
       wait = Selenium::WebDriver::Wait.new(timeout: 10)
 
       login_with_bard_button = wait.until { @nls_driver.find_element(link_text: 'Log in with BARD') }
@@ -82,12 +85,31 @@ module BardSessionManager
       @logged_in = true
     rescue KeyError => e
       puts "Login failed: Missing environment variable - #{e.message}. Please check your .env file."
-    rescue Selenium::WebDriver::Error::TimeoutError
-      puts 'Login page timed out. The site might be slow or unavailable.'
+      exit(1)
+    rescue Selenium::WebDriver::Error::TimeoutError, 
+           Selenium::WebDriver::Error::WebDriverError,
+           Net::OpenTimeout, Net::ReadTimeout, 
+           Errno::ECONNRESET, SocketError => e
+      retry_count += 1
+      if retry_count <= max_retries
+        puts "Network error during login (attempt #{retry_count}/#{max_retries}): #{e.class.name}"
+        sleep(2 * retry_count)
+        retry
+      else
+        puts "\n" + "="*60
+        puts "FATAL: Failed to login to NLS BARD after #{max_retries} attempts"
+        puts "Error: #{e.message}"
+        puts "Login is required to access the BARD website."
+        puts "Please check your network connection and try again later."
+        puts "="*60
+        exit(1)
+      end
     rescue Selenium::WebDriver::Error::NoSuchElementError
       puts 'Login form elements not found. The page structure might have changed.'
+      exit(1)
     rescue StandardError => e
       puts "An unexpected error occurred during login: #{e.message}"
+      exit(1)
     end
   end
 

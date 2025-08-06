@@ -25,6 +25,39 @@ require 'dotenv/load'
 
 @book_number = 0
 
+# Helper function to perform BARD website operations with retry logic
+def with_bard_retry(operation_name, max_retries: 3)
+  retry_count = 0
+  begin
+    yield
+  rescue Selenium::WebDriver::Error::TimeoutError, 
+         Selenium::WebDriver::Error::WebDriverError,
+         Net::OpenTimeout, Net::ReadTimeout, 
+         Errno::ECONNRESET, SocketError => e
+    retry_count += 1
+    if retry_count <= max_retries
+      puts "Network error during #{operation_name} (attempt #{retry_count}/#{max_retries}): #{e.class.name}"
+      sleep(2 * retry_count) # Exponential backoff: 2, 4, 6 seconds
+      retry
+    else
+      puts "\n" + "="*60
+      puts "FATAL: Failed to #{operation_name} after #{max_retries} attempts"
+      puts "Error: #{e.message}"
+      puts "BARD website connection is critical and scraping cannot continue."
+      puts "Please check your network connection and try again later."
+      puts "="*60
+      exit(1)
+    end
+  rescue => e
+    puts "\n" + "="*60
+    puts "FATAL: Unexpected error during #{operation_name}"
+    puts "Error: #{e.class.name} - #{e.message}"
+    puts "Scraping stopped to prevent data loss."
+    puts "="*60
+    exit(1)
+  end
+end
+
 def download(key)
   # Validate the key format case-insensitively.
   return puts "Invalid key format: '#{key}'. Not a standard book ID." unless key =~ /\A[A-Z]{1,3}[0-9]+\z/i
@@ -151,7 +184,10 @@ def iterate_pages(start_letter)
     # The new site's search URL for titles starting with a letter:
     initial_url = "https://nlsbard.loc.gov/bard2-web/search/title/#{letter}/"
     puts "\n--- Starting scrape for letter '#{letter}' ---"
-    driver.navigate.to initial_url
+    
+    with_bard_retry("navigate to letter #{letter} page") do
+      driver.navigate.to initial_url
+    end
 
     page_number = 1
     loop do
@@ -159,7 +195,11 @@ def iterate_pages(start_letter)
       puts "\n--- Processing Page #{page_number} for letter '#{letter}' ---"
 
       sleep 1 # Give page time to load
-      page_content = driver.page_source
+      
+      page_content = with_bard_retry("get page source for letter #{letter}, page #{page_number}") do
+        driver.page_source
+      end
+      
       entries = process_page(page_content)
 
       entries.each { |entry| process_book_entry(entry) }
@@ -167,7 +207,9 @@ def iterate_pages(start_letter)
       begin
         next_page_link = driver.find_element(:xpath, "//a[span[contains(text(), 'Next page')]]")
         puts "Navigating to next page for letter '#{letter}'..."
-        next_page_link.click
+        with_bard_retry("click next page link for letter #{letter}") do
+          next_page_link.click
+        end
         page_number += 1
       rescue Selenium::WebDriver::Error::NoSuchElementError
         puts "No more pages for letter '#{letter}'. Moving to next letter."
@@ -185,7 +227,10 @@ def iterate_update_pages(days)
   # Navigate to the initial "recently added" page.
   # The `days` parameter is noted as not working for the new site.
   initial_url = 'https://nlsbard.loc.gov/bard2-web/search/results/recently-added/?language=en&format=all&type=book'
-  BardSessionManager.nls_driver.navigate.to initial_url
+  
+  with_bard_retry("navigate to recently added page") do
+    BardSessionManager.nls_driver.navigate.to initial_url
+  end
 
   page_number = 1
   loop do
@@ -193,7 +238,10 @@ def iterate_update_pages(days)
 
     # Give the page a moment to load, especially after a click
     sleep 1
-    page_content = BardSessionManager.nls_driver.page_source
+    
+    page_content = with_bard_retry("get page source for page #{page_number}") do
+      BardSessionManager.nls_driver.page_source
+    end
 
     # NOTE: process_page and process_entry will need to be adapted for the new site's HTML structure.
     entries = process_page(page_content)
@@ -205,7 +253,9 @@ def iterate_update_pages(days)
       # The link text has a comment inside the span, so a partial match is better. e.g. <span>Next page<!-- --> </span>
       next_page_link = BardSessionManager.nls_driver.find_element(:xpath, "//a[span[contains(text(), 'Next page')]]")
       puts 'Navigating to next page...'
-      next_page_link.click
+      with_bard_retry("click next page link") do
+        next_page_link.click
+      end
       page_number += 1
     rescue Selenium::WebDriver::Error::NoSuchElementError
       # This is the expected way to exit the loop: no "Next page" link was found.
