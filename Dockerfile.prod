@@ -50,5 +50,8 @@ RUN gem install bundler && bundle install --jobs $(nproc) --retry 3
 # The user is already 'appuser', so files will have correct ownership.
 COPY . .
 
+# Create output directory with proper permissions for the appuser
+RUN mkdir -p $APP_HOME/output && chown appuser:appuser $APP_HOME/output
+
 # The ENTRYPOINT will run as the 'appuser'.
 ENTRYPOINT ["ruby", "nls_bard.rb"]
