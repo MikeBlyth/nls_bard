@@ -98,6 +98,7 @@ class BookDatabase
           Sequel.ilike(:blurb, "%#{filters[:blurb] || ''}%"))
   end
 
+
   def get_by_hash_fuzzy(filters, threshold: 0.3)
     query = @books.dup
 
@@ -110,8 +111,8 @@ class BookDatabase
     if (author_filter = filters[:author] || '') > ''
       # Parse the user's input to get the last name.
       last_name_from_input = name_parse(author_filter)[:last]
-      # Allow an edit distance of 1 for short names, 2 for longer ones.
-      max_distance = last_name_from_input.length > 6 ? 2 : 2
+      # Allow an edit distance of 2 for both short and long names as was working perfectly
+      max_distance = 2
       query = query.where(Sequel.lit('levenshtein(lower(get_last_name(author)), lower(?)) <= ?', last_name_from_input,
                                      max_distance))
     end
@@ -191,7 +192,16 @@ class BookDatabase
 
   def list_wish # List the wishlist
     puts 'Wish list:'
-    @wish.order(:title).each { |w| puts "\t\"#{w[:title]}\" by #{w[:author]}" }
+    @wish.order(:title).each do |w|
+      # Format author name as "First Last" if it's in "Last, First" format
+      author_display = if w[:author].include?(',')
+                        parts = w[:author].split(',', 2).map(&:strip)
+                        "#{parts[1]} #{parts[0]}"  # "First Last"
+                      else
+                        w[:author]  # Use as-is if no comma
+                      end
+      puts "\t\"\033[36m#{w[:title]}\033[0m\" by #{author_display}"
+    end
   end
 
   def wish_delete(hash)
@@ -201,16 +211,29 @@ class BookDatabase
     @wish.filter(hash).delete
   end
 
-  def wish_remove_by_title(partial_title)
-    clean_title = partial_title.strip
-    matches = @wish.filter(Sequel.ilike(:title, "%#{clean_title}%"))
+  def wish_remove_by_title(search_term)
+    search_term = search_term.strip
+    
+    # Check if it looks like a database key (starts with DB followed by digits)
+    if search_term.match?(/^DB\d+$/i)
+      # Search by key
+      matches = @wish.filter(key: search_term.upcase)
+      search_type = "key '#{search_term.upcase}'"
+    else
+      # Search by title (original behavior)
+      matches = @wish.filter(Sequel.ilike(:title, "%#{search_term}%"))
+      search_type = "title '#{search_term}'"
+    end
 
     case matches.count
     when 0
-      puts "No wishlist item found matching '#{clean_title}'."
+      puts "No wishlist item found matching #{search_type}."
     when 1
       item = matches.first
       puts "Found: '#{item[:title]}' by #{item[:author]}."
+      if item[:key]
+        puts "  Database key: #{item[:key]}"
+      end
       print 'Are you sure you want to remove this item from the wishlist? (y/n) '
       confirmation = gets.chomp.downcase
       if confirmation == 'y'
@@ -220,36 +243,47 @@ class BookDatabase
         puts 'Removal cancelled.'
       end
     else
-      puts "Found multiple matches for '#{clean_title}'. Please be more specific."
-      matches.each { |item| puts "  - '#{item[:title]}' by #{item[:author]}" }
+      puts "Found multiple matches for #{search_type}. Please be more specific."
+      matches.each do |item| 
+        key_info = item[:key] ? " (#{item[:key]})" : ""
+        puts "  - '#{item[:title]}' by #{item[:author]}#{key_info}" 
+      end
     end
   end
 
   def check_for_wishlist_matches
-    puts '(New) Checking for wishlist matches...'
+    puts 'Checking for wishlist matches...'
     found_any = false
 
-    # Iterate over each item in the wishlist and query for it individually.
-    # This is more efficient than a single, complex JOIN on two ILIKE conditions.
     @wish.each do |wish_item|
-      # Use the existing efficient search method.
-      matching_books = get_by_hash({ title: wish_item[:title], author: wish_item[:author] })
-
-      next if matching_books.empty?
-
-      # Print the header only when the first match is found.
-      unless found_any
-        puts 'Found matches to wishlist:'
-        found_any = true
-      end
-
-      matching_books.each do |book|
-        puts "\t'#{wish_item[:title]}' matched: #{book[:title]} by #{book[:author]} (#{book[:key]})"
-        # Update the wishlist item with the key of the found book.
-        @wish.where(id: wish_item[:id]).update(key: book[:key])
+      if wish_item[:key]
+        # Item already has a key - verify book still exists and show it
+        book = @books.where(key: wish_item[:key]).first
+        if book
+          unless found_any
+            puts 'Found matches to wishlist:'
+            found_any = true
+          end
+          puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{book[:title]}\033[0m\" by #{book[:author]} (#{book[:key]})"
+        end
+      else
+        # Item doesn't have a key - search for it using fuzzy matching
+        matching_books = get_by_hash_fuzzy({ title: wish_item[:title], author: wish_item[:author] }).limit(1)
+        
+        if matching_books.any?
+          book = matching_books.first
+          # Store the key so we don't have to search again
+          @wish.where(id: wish_item[:id]).update(key: book[:key])
+          
+          unless found_any
+            puts 'Found matches to wishlist:'
+            found_any = true
+          end
+          puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{book[:title]}\033[0m\" by #{book[:author]} (#{book[:key]}) \033[33m[NEW]\033[0m"
+        end
       end
     end
-    puts 'No new matches found for wishlist items.' unless found_any
+    puts 'No matches found for wishlist items.' unless found_any
   end
 
   def insert_book(newbook)

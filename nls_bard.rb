@@ -294,7 +294,8 @@ def list_books_by_filter(filter, options)
 
   books = if (filter[:key] || '') > ''
             # If a specific key is provided, perform a direct lookup.
-            @mybooks.get_book(filter[:key])
+            book = @mybooks.get_book(filter[:key])
+            book ? [book] : [] # Wrap single result in array, or empty array if not found
           elsif options.fuzzy
             # Otherwise, perform a fuzzy or standard search.
             puts 'Performing fuzzy search...'
@@ -304,9 +305,9 @@ def list_books_by_filter(filter, options)
           end
 
   #	books.each {|book| puts "#{book[:key]} | #{book[:author]}, #{book[:title]}"}
-  if books
+  if books && books.any?
     if $verbose
-      Array(books).each do |book_hash| # Wrap in Array() to handle single book result
+      books.each do |book_hash|
         book = Book.new(book_hash) # {screen_output}"
         book.display(screen_output) # Book needs to know how to format, for screen or a file
         puts ''
@@ -464,11 +465,8 @@ def handle_command(command_line)
     author = filters[:author]
     if filters[:title] > ''
 
-      filters[:author] = if author =~ /(.*?),/ # Use only part before comma, i.e. first name
-                           Regexp.last_match(1)
-                         else
-                           author.split.last # Last name only
-                         end
+      # Preserve the full author name as entered
+      filters[:author] = author
       @mybooks.insert_wish(filters)
     else # No auth/title given, so just list
       @mybooks.list_wish
