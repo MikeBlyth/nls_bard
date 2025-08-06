@@ -555,6 +555,62 @@ def handle_command(command_line)
     selected.each { |book| puts "\t#{book[:key]} | #{book[:title]}" }
   end
 
+  if options.interesting
+    puts "Finding interesting books with criteria:"
+    puts "  Minimum stars: #{options.min_stars}"
+    puts "  Minimum ratings: #{options.min_ratings}"
+    puts "  Minimum year: #{options.min_year == 0 ? 'any' : options.min_year}"
+    puts ""
+    
+    interesting_books = @mybooks.find_interesting_books(
+      minimum_year: options.min_year,
+      minimum_stars: options.min_stars,
+      minimum_ratings: options.min_ratings
+    ).all
+    
+    if interesting_books.any?
+      puts "Found #{interesting_books.count} interesting book#{'s' if interesting_books.count != 1}:"
+      puts ""
+      
+      # Sort by stars ascending
+      interesting_books.sort_by! { |book| book[:stars] || 0 }
+      
+      # Group by first category
+      books_by_category = interesting_books.group_by do |book|
+        # Extract first category from categories string
+        categories = book[:categories] || ""
+        first_category = categories.split(/[,;]/).first&.strip || "Uncategorized"
+        first_category
+      end
+      
+      # Display grouped by category
+      books_by_category.sort.each do |category, books|
+        puts "=== #{category} ==="
+        books.each do |book|
+          book_obj = Book.new(book)
+          if options.verbose
+            book_obj.display
+            puts ""
+          else
+            # Format key in 9-wide fixed field
+            key_field = "%-9s" % (book[:key] || "")
+            
+            # Truncate title at 80 characters and colorize light blue
+            title = book[:title] || ""
+            truncated_title = title.length > 80 ? title[0..76] + "..." : title
+            colored_title = "\033[94m#{truncated_title}\033[0m"  # Light blue color
+            
+            puts "  #{key_field} | #{colored_title} by #{book[:author]} | ⭐ #{book[:stars]} (#{book[:ratings]} ratings)"
+          end
+        end
+        puts ""
+      end
+    else
+      puts "No books found matching the interesting criteria."
+      puts "Try lowering the minimum stars or ratings, or check if you have desired categories set."
+    end
+  end
+
   if options.backup
     backup_tables
     zip_backups

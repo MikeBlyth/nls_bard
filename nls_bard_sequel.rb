@@ -59,7 +59,7 @@ class BookDatabase
   def find_interesting_books(minimum_year: 0, minimum_stars: 3.8, minimum_ratings: 1000)
     books_with_desired_category.where do
       year >= minimum_year
-    end.where { stars >= minimum_stars }.where { ratings >= minimum_ratings }.where(~has_read)
+    end.where { stars >= minimum_stars }.where { ratings >= minimum_ratings }.where(has_read: false)
   end
 
   def is_interesting(key, minimum_year: 0, minimum_stars: 3.8, minimum_ratings: 1000)

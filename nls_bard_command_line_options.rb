@@ -29,6 +29,10 @@ class Optparse
     options.backup = false
     options.update_ratings = false
     options.manual_update = false
+    options.interesting = false
+    options.min_stars = 3.8
+    options.min_ratings = 1000
+    options.min_year = 0
 
     options.verbose = false
 
@@ -71,6 +75,11 @@ class Optparse
       # List/return Bookmarked
       opts.on('--marked', 'Select marked books') do |v|
         options.marked = true
+      end
+
+      # Find interesting books
+      opts.on('-i', '--interesting', 'Find interesting books (high-rated, desired categories, unread)') do |v|
+        options.interesting = true
       end
 
       # Wishlist
@@ -134,6 +143,24 @@ class Optparse
       opts.on('-k', '--key KEY',
               'specify book key (e.g. DB60197)') do |key|
         options.key << key
+      end
+
+      opts.separator ''
+      opts.separator 'Interesting books criteria:'
+
+      # Minimum stars
+      opts.on('--min-stars STARS', Float, 'Minimum Goodreads rating (default: 3.8)') do |stars|
+        options.min_stars = stars
+      end
+
+      # Minimum number of ratings
+      opts.on('--min-ratings COUNT', Integer, 'Minimum number of Goodreads ratings (default: 1000)') do |count|
+        options.min_ratings = count
+      end
+
+      # Minimum year
+      opts.on('--min-year YEAR', Integer, 'Minimum publication year (default: any year)') do |year|
+        options.min_year = year
       end
 
       opts.separator ''
