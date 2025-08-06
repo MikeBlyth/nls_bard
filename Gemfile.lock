@@ -134,7 +134,7 @@ DEPENDENCIES
   pg
   pp
   reline
-  rexml (>= 3.2.5)
+  rexml (= 3.4.1)
   rspec
   rubocop
   ruby-lsp

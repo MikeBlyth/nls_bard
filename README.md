@@ -1,18 +1,30 @@
-# NLS_BARD APP
+# NLS BARD APP
 
-The purpose of this app is to make it more convenient to find and download audio books for the blind from the NLS Bard site (https://nlsbard.loc.gov/). The app
+The purpose of this app is to make it more convenient to find and download audio books for the blind from the NLS BARD site (https://nlsbard.loc.gov/). The app:
 
-*   Downloads entries from the NLS database into a local Postgresql database
+*   Downloads entries from the NLS database into a local PostgreSQL database
 *   Gets Goodreads ratings for each book where they exist and adds that to the database
 *   Keeps a wishlist and checks it against books that exist in the database
-*   Provides tools for searching
+*   Provides tools for searching with fuzzy matching support
 *   Facilitates downloading titles
+*   Includes robust network error handling with automatic retry mechanisms
 
 This project runs inside Docker to create a stable, consistent environment and avoid issues with local changes to Ruby, Chrome, or system dependencies.
 
 ## Installation and Setup
 
-These instructions assume you are using WSL 2 on Windows, with Docker Desktop installed and integrated with your WSL distribution.
+Complete setup instructions for installing the NLS BARD app on a new system. These instructions assume you are using WSL 2 on Windows with Docker Desktop installed and integrated with your WSL distribution.
+
+### Prerequisites
+
+- **Docker Desktop**: Installed and running with WSL 2 integration enabled
+- **WSL 2**: Ubuntu or similar Linux distribution
+- **Git**: For cloning the repository
+- **NLS BARD Account**: Valid username and password for https://nlsbard.loc.gov/
+
+### Method 1: Quick Setup (Recommended for New Users)
+
+This method downloads pre-built Docker images for faster setup:
 
 1.  **Clone the Repository:**
     ```bash
@@ -20,60 +32,170 @@ These instructions assume you are using WSL 2 on Windows, with Docker Desktop in
     cd nls_bard
     ```
 
-2.  **Configure Your Environment (One-Time Setup):**
-    Create a `.env` file in the project root. This file stores your personal credentials and user configuration so Docker can run the application correctly without file permission errors.
-
-    You can create this file automatically by running the command below. **You must edit the file afterwards** to add your NLS BARD username, password, and database password.
-
+2.  **Create Environment Configuration:**
     ```bash
+    # Create .env file with your settings
     cat <<EOF > .env
-    # NLS Bard Credentials
+    # NLS BARD Credentials (REQUIRED - Replace with your actual credentials)
     NLS_BARD_USERNAME=your_username_here
     NLS_BARD_PASSWORD=your_password_here
     
-    # PostgreSQL Database Password
-    POSTGRES_PASSWORD=a_strong_password_for_the_database
+    # Database Password (REQUIRED - Choose a strong password)
+    POSTGRES_PASSWORD=your_strong_database_password_here
     
-    # Path to your Windows Downloads folder (for WSL)
-    # Example: /mnt/c/Users/YourUser/Downloads
+    # Downloads Path (REQUIRED - Update with your actual path)
+    # Example: /mnt/c/Users/YourName/Downloads
     WIN_DOWNLOADS_PATH=/mnt/d/Users/mike/Downloads
     
-    # Host User and Group ID for file permissions.
-    # These are set automatically to match your current user.
+    # File Permissions (automatically set for current user)
     HOST_UID=$(id -u)
     HOST_GID=$(id -g)
     EOF
     ```
 
-3.  **Build Docker Images:**
-    With your `.env` file configured, build the images from the project root. You only need to do this once, or when you change the `Dockerfile` or `Gemfile`.
+3.  **Edit the .env File:**
     ```bash
+    nano .env  # or use your preferred editor
+    ```
+    **IMPORTANT**: Replace `your_username_here`, `your_password_here`, `your_strong_database_password_here`, and update the `WIN_DOWNLOADS_PATH` with your actual values.
+
+4.  **Download Pre-built Images (if available):**
+    ```bash
+    # If Docker images are published to a registry:
+    docker-compose pull
+    
+    # Or build locally (takes longer but always works):
     docker-compose build
     ```
 
-4.  **Database Setup (First Time Only):**
-    - Start the database service: `docker-compose up -d db`
-    - If you have a database dump (e.g., `nls_bard_db_dump.sql`) in the `db_dump` folder, restore it:
-      ```bash
-      docker-compose exec -T db psql -U mike -d nlsbard < db_dump/nls_bard_db_dump.sql
-      ```
-
-5.  **(Optional) Install Helper Scripts:** For convenience, you can copy the helper scripts to a location in your `PATH`.
+5.  **Set Up Database:**
     ```bash
-    sudo cp nls nls-update /usr/local/bin/
-    sudo chmod +x /usr/local/bin/nls /usr/local/bin/nls-update
+    # Start database service
+    docker-compose up -d db
+    
+    # Wait a few seconds for database to initialize
+    sleep 10
+    
+    # Test the setup
+    ./nls-dev.sh -h
     ```
+
+6.  **Restore Database from Backup (if you have one):**
+    ```bash
+    # If you have a database backup file in db_dump/ folder:
+    ./restore_database.sh db_dump/nls_bard_backup_YYYYMMDD_HHMMSS.sql
+    
+    # Or start with fresh database (will be populated on first scrape)
+    ```
+
+7.  **Verify Installation:**
+    ```bash
+    # Test basic functionality
+    ./nls-dev.sh -w                    # Should show empty wishlist or existing items
+    ./nls-dev.sh -f -t "test"          # Should search database (may be empty initially)
+    ```
+
+### Method 2: Build from Source (Advanced Users)
+
+For development or if pre-built images aren't available:
+
+1.  **Clone and Configure (same as Method 1, steps 1-3)**
+
+2.  **Build Docker Images:**
+    ```bash
+    # Build development environment
+    docker-compose build
+    
+    # Build production environment
+    docker-compose -f docker-compose.prod.yml build
+    ```
+
+3.  **Database Setup (same as Method 1, steps 5-7)**
+
+### Complete System Migration
+
+If moving from an existing installation to a new system:
+
+1.  **On Old System - Create Backup:**
+    ```bash
+    ./backup_database.sh
+    # This creates: db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
+    ```
+
+2.  **Transfer Files:**
+    - Copy the entire project directory to new system
+    - Or: Clone fresh repository + copy `.env` file + copy database backup
+
+3.  **On New System - Follow Method 1 above, then:**
+    ```bash
+    # Restore your data
+    ./restore_database.sh db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
+    
+    # Verify restoration
+    ./nls-dev.sh -w                    # Check wishlist
+    ./nls-dev.sh -f -t "some title"    # Search for known book
+    ```
+
+### Initial Database Population
+
+If starting with an empty database:
+
+```bash
+# Get recent books (this may take 30+ minutes)
+./nls-dev.sh -g 30
+
+# Or for complete A-Z scrape (this may take several hours)
+./nls-dev.sh --scrape_all_letters
+```
 
 ## Usage
 
-**Important:** The helper scripts (`nls`, `nls-update`) must be run from the project's root directory (the one containing `docker-compose.yml`).
+The project provides several convenience scripts for different environments:
 
-The helper scripts start a temporary container, execute your command, and then prompt for the next command in an interactive session.
+- **`./nls-dev.sh [command]`** - Development environment (mounts current directory for live code editing)
+- **`./nls-prod.sh [command]`** - Production environment (self-contained image)
+- **`./rebuild-prod.sh`** - Rebuild production image after code changes
 
+### Development vs Production Environments
+
+- **Development**: Use `./nls-dev.sh` for testing and development. Code changes are immediately available.
+- **Production**: Use `./nls-prod.sh` for stable operations. Requires `./rebuild-prod.sh` after code changes.
+- The scripts automatically prevent running both environments simultaneously.
+
+### Running Commands
+
+```bash
+# Development examples
+./nls-dev.sh -f -t "Tom Sawyer"          # Search for books
+./nls-dev.sh -w -t "Title" -a "Author"   # Add to wishlist  
+./nls-dev.sh -g 30                       # Update database (30 days)
+
+# Production examples (same commands, different script)
+./nls-prod.sh -w                         # View wishlist
+./nls-prod.sh -d DB123456                # Download book
+./nls-prod.sh --backup                   # Create database backup
+
+# Interactive shell for development
+./nls-dev.sh                             # Opens bash shell in container
+```
 
 ## Book Updates
 
-I'm using Windows Task Scheduler to run `nls-update` daily in order to keep the catalog up to date, but this should be checked from time to time.
+Regular database updates should be run to keep the catalog current. The system will automatically handle network interruptions with retry mechanisms.
+
+## Network Error Handling
+
+The application includes robust error handling for network connectivity issues:
+
+- **Automatic Retry**: Network operations retry up to 3 times with exponential backoff (2, 4, 6 seconds)
+- **Fail-Safe Operation**: If retries fail, the application stops rather than continuing with incomplete data
+- **Protected Operations**: 
+  - Goodreads rating lookups (critical for book metadata)
+  - NLS BARD website scraping (critical for book discovery)
+  - Database operations (with duplicate prevention)
+- **Clear Error Messages**: Detailed feedback when network issues occur
+
+This ensures no books are processed without their complete metadata and prevents data corruption.
 
 ## Commands
 
@@ -92,7 +214,7 @@ Find a title, can use title and/or author: `-f -t "Tom Sawyer" -a Twain [-v]`
 - 
 Download a title: `-d DB1234567`
 
-The current configuration sends downloads into d:/users/mike/downloadsd. This is in the docker-compose.yaml file
+Downloads are saved to the directory specified in your `.env` file (`WIN_DOWNLOADS_PATH` variable), typically your Windows Downloads folder when using WSL.
 
 ### Other Actions
 
@@ -140,40 +262,44 @@ Runtime options:
     -h, --help                       Show this message
 
 
-## Shell files
+## Shell Scripts
 
-These helper scripts are located in the project root and can be copied to a directory in your `PATH` (like `/usr/local/bin`) for convenience. They must be run from the project's root directory.
+The project includes several shell scripts for different operations:
 
-**`nls`:**
-```
-#!/bin/bash
+- **`./nls-dev.sh`** - Development environment wrapper
+- **`./nls-prod.sh`** - Production environment wrapper  
+- **`./rebuild-prod.sh`** - Rebuild production Docker image
+- **`./backup_database.sh`** - Create comprehensive database backup
+- **`./restore_database.sh <file>`** - Restore database from backup
 
-# Default arguments if none are provided
-DEFAULT_ARGS="-f -t 'x12xxx'"
+### Common Operations
 
-# Check if arguments are provided
-if [ $# -eq 0 ]; then
-    ARGS="$DEFAULT_ARGS"
-else
-    ARGS="$@"
-fi
+**Updating Docker Images:**
+```bash
+# Development environment (automatically rebuilds when needed)
+./nls-dev.sh 
 
-# Run the docker-compose command with the appropriate arguments
-docker-compose run --rm app ruby nls_bard.rb $ARGS
-```
-nls-update:
-```
-docker-compose run --rm app ruby nls_bard.rb -g 30
+# Production environment (requires manual rebuild after changes)
+./rebuild-prod.sh
 ```
 
-Updating the Docker Image
+**Database Operations:**
+```bash
+# Create backup
+./backup_database.sh
 
-docker-compose build
+# Restore from backup  
+./restore_database.sh db_dump/nls_bard_backup_20250804_192120.sql
 
-Running a Shell Inside Container
+# Interactive database access
+docker-compose exec db psql -U mike -d nlsbard
+```
 
-docker-compose up -d
-docker-compose exec app /bin/bash
+**Running Interactive Shell:**
+```bash
+./nls-dev.sh                    # Development shell
+./nls-prod.sh /bin/bash         # Production shell (after build)
+```
 
 # Revisions for new BARD (BARD2)
 
