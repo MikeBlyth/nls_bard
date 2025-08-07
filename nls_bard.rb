@@ -392,7 +392,7 @@ def update_author_read_count(book)
       last_name: parsed[:last],
       first_name: parsed[:first],
       middle_name: parsed[:middle]
-    ).update(Sequel.expr(:has_read) + 1)
+    ).update(has_read: Sequel.expr(:has_read) + 1)
     
     if rows_updated > 0
       puts "  Updated read count for author: #{parsed[:first]} #{parsed[:middle]} #{parsed[:last]}"
