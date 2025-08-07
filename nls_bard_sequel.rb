@@ -21,6 +21,7 @@ class BookDatabase
     @wish = @DB[:wishlist]
     @cat_book = @DB[:cat_book]
     @columns = @books.columns # Book columns
+    @wishlist_manager = nil # Will be initialized when needed
     setup_database_indexes
   end
 
@@ -181,10 +182,26 @@ class BookDatabase
       puts "#{b[:title]} by #{b[:author]} is already an NLS BARD book (#{b[:key]})"
       puts "\t" + read
 
+      # Still add to wishlist with the key so it shows up as matched
+      # Check if already in wishlist first
+      existing_wish = @wish.where(Sequel.ilike(:title, '%' + title + '%') & Sequel.ilike(:author, '%' + author + '%')).first
+      if existing_wish.nil?
+        @wish.insert(title:, author:, key: b[:key])
+        @wishlist_manager&.sync_add_item(title, author) if @wishlist_manager&.sheets_enabled?
+      elsif existing_wish[:date_downloaded]
+        puts "#{title} by #{author} was already downloaded on #{existing_wish[:date_downloaded]}"
+      else
+        puts "#{title} by #{author} is already in the wishlist"
+      end
       return
     end
-    if @wish.where(Sequel.ilike(:title, '%' + title + '%') & Sequel.ilike(:author, '%' + author + '%')).empty? # Make sure book not already in the list
+    # Check if book is already in wishlist (including downloaded ones)
+    existing_item = @wish.where(Sequel.ilike(:title, '%' + title + '%') & Sequel.ilike(:author, '%' + author + '%')).first
+    if existing_item.nil?
       @wish.insert(title:, author:) # Insert it
+      @wishlist_manager&.sync_add_item(title, author) if @wishlist_manager&.sheets_enabled?
+    elsif existing_item[:date_downloaded]
+      puts "#{title} by #{author} was already downloaded on #{existing_item[:date_downloaded]}"
     else
       puts "#{title} by #{author} is already in the wishlist"
     end
@@ -238,7 +255,7 @@ class BookDatabase
 
   def list_wish # List the wishlist
     puts 'Wish list:'
-    @wish.order(:title).each do |w|
+    @wish.where(date_downloaded: nil).order(:title).each do |w|
       # Format author name as "First Last" if it's in "Last, First" format
       author_display = if w[:author].include?(',')
                         parts = w[:author].split(',', 2).map(&:strip)
@@ -261,17 +278,23 @@ class BookDatabase
     @wish.filter(hash).delete
   end
 
+  def wish_mark_downloaded(hash)
+    return unless (hash[:id] || '') + (hash[:key] || '') + (hash[:title] || '') > ''
+
+    @wish.filter(hash).update(date_downloaded: Date.today)
+  end
+
   def wish_remove_by_title(search_term)
     search_term = search_term.strip
     
     # Check if it looks like a database key (starts with DB followed by digits)
     if search_term.match?(/^DB\d+$/i)
-      # Search by key
-      matches = @wish.filter(key: search_term.upcase)
+      # Search by key (only non-downloaded items)
+      matches = @wish.where(date_downloaded: nil).filter(key: search_term.upcase)
       search_type = "key '#{search_term.upcase}'"
     else
-      # Search by title (original behavior)
-      matches = @wish.filter(Sequel.ilike(:title, "%#{search_term}%"))
+      # Search by title (only non-downloaded items)
+      matches = @wish.where(date_downloaded: nil).filter(Sequel.ilike(:title, "%#{search_term}%"))
       search_type = "title '#{search_term}'"
     end
 
@@ -301,38 +324,75 @@ class BookDatabase
     end
   end
 
-  def check_for_wishlist_matches
-    puts 'Checking for wishlist matches...'
-    found_any = false
-
-    @wish.each do |wish_item|
-      if wish_item[:key]
-        # Item already has a key - verify book still exists and show it
-        book = @books.where(key: wish_item[:key]).first
-        if book
-          unless found_any
-            puts 'Found matches to wishlist:'
-            found_any = true
-          end
-          puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{book[:title]}\033[0m\" by #{book[:author]} (#{book[:key]})"
+  def check_for_wishlist_matches(specific_books = nil)
+    if specific_books && specific_books.any?
+      puts "Checking for wishlist matches in #{specific_books.count} newly added books..."
+    else
+      puts 'Checking for wishlist matches...'
+    end
+    
+    # First, search for new matches in the specified subset (if provided)
+    new_matches_found = false
+    if specific_books
+      @wish.where(date_downloaded: nil, key: nil).each do |wish_item|
+        # Search only within specific books for new matches
+        matching_book = specific_books.find do |book|
+          # Skip if any field is nil
+          next if book[:title].nil? || book[:author].nil? || wish_item[:title].nil? || wish_item[:author].nil?
+          
+          # Use simple fuzzy matching logic
+          book_title_words = book[:title].downcase.split
+          wish_title_words = wish_item[:title].downcase.split
+          book_author_words = book[:author].downcase.split
+          wish_author_words = wish_item[:author].downcase.split
+          
+          # Skip if any field is empty after splitting
+          next if book_title_words.empty? || wish_title_words.empty? || book_author_words.empty? || wish_author_words.empty?
+          
+          title_match = book_title_words.first.include?(wish_title_words.first) ||
+                       wish_title_words.first.include?(book_title_words.first)
+          author_match = book_author_words.last.include?(wish_author_words.last) ||
+                        wish_author_words.last.include?(book_author_words.last)
+          title_match && author_match
         end
-      else
-        # Item doesn't have a key - search for it using fuzzy matching
+        
+        if matching_book
+          # Store the key so we don't have to search again
+          @wish.where(id: wish_item[:id]).update(key: matching_book[:key])
+          new_matches_found = true
+        end
+      end
+    else
+      # Search entire database for items without keys
+      @wish.where(date_downloaded: nil, key: nil).each do |wish_item|
         matching_books = get_by_hash_fuzzy({ title: wish_item[:title], author: wish_item[:author] }).limit(1)
         
         if matching_books.any?
           book = matching_books.first
-          # Store the key so we don't have to search again
           @wish.where(id: wish_item[:id]).update(key: book[:key])
-          
-          unless found_any
-            puts 'Found matches to wishlist:'
-            found_any = true
-          end
-          puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{book[:title]}\033[0m\" by #{book[:author]} (#{book[:key]}) \033[33m[NEW]\033[0m"
+          new_matches_found = true
         end
       end
     end
+    
+    # Now display ALL wishlist items that have matches (regardless of when they were found)
+    found_any = false
+    @wish.where(date_downloaded: nil).exclude(key: nil).each do |wish_item|
+      book = @books.where(key: wish_item[:key]).first
+      if book
+        unless found_any
+          puts 'Found matches to wishlist:'
+          found_any = true
+        end
+        
+        # Check if this is a newly found match
+        is_new = specific_books && specific_books.any? { |b| b[:key] == book[:key] }
+        new_indicator = is_new ? ' \033[33m[NEW]\033[0m' : ''
+        
+        puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{book[:title]}\033[0m\" by #{book[:author]} (#{book[:key]})#{new_indicator}"
+      end
+    end
+    
     puts 'No matches found for wishlist items.' unless found_any
   end
 
@@ -454,6 +514,149 @@ class BookDatabase
     end
   end
 
+  def test_delete_book(key:)
+    # Validate key is provided
+    if key.nil? || key.strip.empty?
+      puts "❌ Key is required"
+      return false
+    end
+
+    # Normalize key format
+    key = key.upcase.strip
+
+    # Check if book exists
+    unless book_exists?(key)
+      puts "❌ Book with key #{key} does not exist in database"
+      return false
+    end
+
+    # Get book info for confirmation
+    book = get_book(key)
+    
+    begin
+      # Delete from books table
+      deleted_books = @books.where(key: key).delete
+      
+      # Also clean up category associations
+      @cat_book.where(book: key).delete
+      
+      # Remove from wishlist if it exists there
+      removed_from_wishlist = @wish.where(key: key).delete
+      
+      puts "✓ Test book deleted successfully:"
+      puts "  Title: #{book[:title]}"
+      puts "  Author: #{book[:author]}"
+      puts "  Key: #{key}"
+      puts "  Removed from books: #{deleted_books > 0}"
+      puts "  Removed from wishlist: #{removed_from_wishlist > 0}" if removed_from_wishlist > 0
+      
+      true
+    rescue => e
+      puts "❌ Error deleting test book: #{e.message}"
+      false
+    end
+  end
+
+  def test_add_book(title:, author:, key:, date_added: Date.today)
+    # Parse the date if it's a string
+    if date_added.is_a?(String)
+      begin
+        date_added = Date.parse(date_added)
+      rescue Date::Error => e
+        puts "❌ Invalid date format: #{date_added}. Use YYYY-MM-DD format."
+        return false
+      end
+    end
+
+    # Validate required fields
+    if title.nil? || title.strip.empty?
+      puts "❌ Title is required"
+      return false
+    end
+    
+    if author.nil? || author.strip.empty?
+      puts "❌ Author is required"
+      return false
+    end
+    
+    if key.nil? || key.strip.empty?
+      puts "❌ Key is required"
+      return false
+    end
+
+    # Normalize key format
+    key = key.upcase.strip
+
+    # Check if book already exists
+    if book_exists?(key)
+      puts "❌ Book with key #{key} already exists in database"
+      return false
+    end
+
+    # Create basic book record
+    book_data = {
+      key: key,
+      title: title.strip,
+      author: author.strip,
+      date_added: date_added,
+      has_read: false,
+      language: 'English',
+      year: nil,
+      stars: nil,
+      ratings: nil,
+      categories: '',
+      read_by: '',
+      blurb: 'Test book added via --test_add command',
+      awards: '',
+      target_age: '',
+      reading_time: nil,
+      bookmarked: false,
+      date_downloaded: nil
+    }
+
+    begin
+      @books.insert(book_data)
+      puts "✓ Test book added successfully:"
+      puts "  Title: #{title}"
+      puts "  Author: #{author}"
+      puts "  Key: #{key}"
+      puts "  Date Added: #{date_added}"
+      true
+    rescue => e
+      puts "❌ Error adding test book: #{e.message}"
+      false
+    end
+  end
+
+  # Wishlist Manager Integration
+  def get_wishlist_manager
+    unless @wishlist_manager
+      require_relative 'lib/wishlist_manager'
+      @wishlist_manager = WishlistManager::SyncManager.new(self)
+    end
+    @wishlist_manager
+  end
+
+  def enable_sheets_sync
+    get_wishlist_manager.enable_sheets_sync
+  end
+
+  def disable_sheets_sync
+    get_wishlist_manager.disable_sheets_sync
+  end
+
+  def sync_full_wishlist_to_sheets
+    get_wishlist_manager.sync_full_wishlist
+  end
+
+  def mark_book_read_in_sheets(title, author)
+    get_wishlist_manager.mark_book_read(title, author)
+  end
+
+  def sync_after_book_session(newly_added_books = nil)
+    get_wishlist_manager.sync_after_book_session(newly_added_books)
+  end
+
   private
 
   def setup_database_indexes
@@ -530,4 +733,5 @@ class BookDatabase
   def table_exists?(table_name)
     @DB.table_exists?(table_name)
   end
+
 end

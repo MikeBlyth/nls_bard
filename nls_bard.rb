@@ -429,8 +429,12 @@ def mark_book_as_read(key, success_message = nil)
   book = @mybooks.get_book(key)
   if book
     @books.filter(key: book[:key]).update(has_read: true, date_downloaded: Date.today)
-    @mybooks.wish_delete(key: book[:key])
+    @mybooks.wish_mark_downloaded(key: book[:key])
     update_author_read_count(book)
+    
+    # Sync to Google Sheets if enabled - mark as read
+    @mybooks.mark_book_read_in_sheets(book[:title], book[:author])
+    
     puts success_message || "Marked as downloaded: #{book[:title]} (#{key})"
   else
     puts "Book with key #{key} not found in the database."
@@ -560,6 +564,24 @@ def handle_command(command_line)
   if options.getnew > 0
     puts "getting books added in past #{options.getnew} days"
     read_updates(options.getnew)
+    
+    # Get books added today for wishlist checking and Google Sheets sync
+    today_books = @mybooks.books.where(date_added: Date.today).all
+    
+    # Enable Google Sheets sync for post-session processing
+    sheets_enabled = @mybooks.get_wishlist_manager.enable_sheets_sync
+    
+    if sheets_enabled
+      # Perform full bidirectional sync with Google Sheets
+      @mybooks.sync_after_book_session(options.check_all_wishlist ? nil : today_books)
+    else
+      # Fallback to local-only wishlist matching if sheets not available
+      if options.check_all_wishlist
+        @mybooks.check_for_wishlist_matches
+      else
+        @mybooks.check_for_wishlist_matches(today_books) if today_books.any?
+      end
+    end
   end
 
   if options.output > ''
@@ -677,6 +699,25 @@ def handle_command(command_line)
   if options.backup
     backup_tables
     zip_backups
+  end
+
+  if options.sync_sheets
+    puts "Syncing wishlist with Google Sheets..."
+    @mybooks.enable_sheets_sync
+    @mybooks.sync_full_wishlist_to_sheets
+  end
+
+  if options.test_add
+    @mybooks.test_add_book(
+      title: options.title,
+      author: options.author, 
+      key: options.key,
+      date_added: options.test_date
+    )
+  end
+
+  if options.test_delete
+    @mybooks.test_delete_book(key: options.key)
   end
 
   if options.download != []

@@ -4,7 +4,9 @@ The purpose of this app is to make it more convenient to find and download audio
 
 *   Downloads entries from the NLS database into a local PostgreSQL database
 *   Gets Goodreads ratings for each book where they exist and adds that to the database
-*   Keeps a wishlist and checks it against books that exist in the database
+*   **Maintains a smart wishlist with bidirectional Google Sheets synchronization**
+*   **Efficiently matches wishlist items against newly added books only**  
+*   **Tracks downloaded books with date stamps instead of removing from wishlist**
 *   Provides tools for searching with fuzzy matching support
 *   Facilitates downloading titles
 *   Tracks author reading statistics with automatic count updates
@@ -213,29 +215,67 @@ This ensures no books are processed without their complete metadata and prevents
 
 ## Commands
 
-Update the database of titles: `-g 30`
+### Core Database Operations
 
-- This was intended to get the past <n> days, but it seems NLS just gives 30 days regardless of the number, so the update needs to run at least once a month or it will miss some titles.
+**Update the database of titles**: `-g 30`
+- This was intended to get the past <n> days, but it seems NLS just gives 30 days regardless of the number, so the update needs to run at least once a month or it will miss some titles
+- **NEW**: Automatically performs bidirectional Google Sheets sync after database updates
+- **NEW**: Efficient wishlist matching only checks newly added books by default (use `--all` to check entire catalog)
 
-Add a title to wish list: `-w -t "Tom Sawyer" -a Twain`
+**Find a title**: `-f -t "Tom Sawyer" -a Twain [-v]`
+- Can use title and/or author for searching
+- `-v` option gives long (verbose) output including download history
+- Supports fuzzy matching for better search results
 
-Check whether any wish list titles are found: `-w`
+**Download a title**: `-d DB1234567`
+- Downloads are saved to the directory specified in your `.env` file (`WIN_DOWNLOADS_PATH` variable)
+- Automatically marks book as downloaded with date stamp
+- Updates wishlist and Google Sheets if sync is enabled
+- Increments author's read count in the authors table
 
-Remove an item from the wishlist: `--wish_remove "partial title"`
+**Mark a title as downloaded** (without actually downloading): `-X DB1234567` or `--mark-downloaded DB1234567`
+- Use when you downloaded a book from another system but want to update your records
+- Same effects as actual download: marks as read, updates wishlist, syncs to sheets
 
-Find a title, can use title and/or author: `-f -t "Tom Sawyer" -a Twain [-v]`
-- -v option gives long (verbose) output including whether and when the title was previously downloaded
-- 
-Download a title: `-d DB1234567`
+### Wishlist Management
 
-Mark a title as downloaded (without actually downloading): `-X DB1234567` or `--mark-downloaded DB1234567`
-- Use this when you downloaded a book from another system but want to update your records
-- Both download and mark-downloaded options will:
-  - Update the book's status to "read" and set download date
-  - Remove the book from your wishlist
-  - Increment the author's read count in the authors table
+**Add a title to wishlist**: `-w -t "Tom Sawyer" -a Twain`
+- **NEW**: If book exists in database, immediately adds to wishlist with database key
+- **NEW**: Automatically syncs to Google Sheets if enabled
+- Shows whether book is already available or previously downloaded
 
-Downloads are saved to the directory specified in your `.env` file (`WIN_DOWNLOADS_PATH` variable), typically your Windows Downloads folder when using WSL.
+**Check wishlist matches**: `-w`
+- Lists current wishlist and shows any matches found in the database
+- **NEW**: Displays color-coded indicators for authors you've read before
+- **NEW**: Shows download dates for books you've already read
+
+**Remove item from wishlist**: `--wish_remove "partial title"`
+- Can search by partial title or database key (e.g., DB123456)
+- Interactive confirmation before removal
+- Only shows non-downloaded items for removal
+
+### Google Sheets Integration
+
+**Full bidirectional sync**: `--sync-sheets`
+- Imports new items from Google Sheets to local wishlist
+- Exports complete local wishlist to Google Sheets with match details
+- Maintains 6-column format: Title, Author, Matched Title, Matched Author, Key, Read
+
+**Efficient wishlist checking**: 
+- Default behavior: Only check newly added books for wishlist matches (faster)
+- Use `--all` flag with `-g` to check entire catalog (slower but comprehensive)
+
+### Development and Testing
+
+**Add test book**: `--test_add -t "Title" -a "Author" -k DB123456 [-d YYYY-MM-DD]`
+- Adds a test book to database for development/testing
+- Optional date parameter (defaults to today)
+- Useful for testing wishlist matching and sync functionality
+
+**Delete test book**: `--testdelete -k DB123456`
+- Removes a test book from database
+- Cleans up associated wishlist entries and category associations
+- Use for cleaning up after testing
 
 ### Other Actions
 
@@ -358,6 +398,39 @@ docker exec -i nls-bard-dev-container-db-1 psql -U mike -d nlsbard
 ./nls-dev.sh                    # Development shell
 ./nls-prod.sh /bin/bash         # Production shell (after build)
 ```
+
+## Google Sheets Integration (Optional)
+
+The application includes **bidirectional Google Sheets sync** for advanced wishlist management. This allows you to manage your wishlist through Google Sheets while maintaining automatic synchronization with the local database.
+
+### Features
+
+- **Import**: New items added to Google Sheets are automatically imported to local wishlist
+- **Matching**: Local database is searched for matches to wishlist items  
+- **Export**: Complete wishlist with match details is exported back to Google Sheets
+- **Automatic Sync**: Runs during `-g` database updates for seamless operation
+- **Master Interface**: Google Sheets becomes your primary wishlist management interface
+
+### Setup
+
+The project includes pre-configured Google Sheets integration:
+
+- **Service Account**: `bookwishlist@nls-bard.iam.gserviceaccount.com`
+- **Credentials**: Located in `google_credentials.json`
+- **Sheet ID**: `1lzbFyKVTwjFfAAZLP5f-fyWmsCt38PdmejtfuZMo8aw`
+- **Format**: 6-column layout (Title, Author, Matched Title, Matched Author, Key, Read)
+
+### Workflow
+
+1. **Add Books**: Add desired books to Google Sheets (Title and Author columns only)
+2. **Daily Update**: Run `./nls-dev.sh -g 30` to update database and sync
+3. **Automatic Processing**: 
+   - App imports new items from sheet to local wishlist
+   - Searches database for matches to wishlist items
+   - Exports complete wishlist with match details back to sheet
+4. **Results**: Matched books show database details; downloaded books marked with ✓
+
+This creates a seamless workflow where Google Sheets serves as your wishlist interface while the app handles all the technical synchronization and matching.
 
 # Revisions for new BARD (BARD2)
 

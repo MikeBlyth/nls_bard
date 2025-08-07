@@ -26,6 +26,7 @@ gem 'sequel'
 gem 'shellwords' # turns string into command-line-like args
 gem 'word_wrap'
 gem 'zip'
+gem 'google-api-client' # Google Sheets API integration
 
 group :development, :test do
   gem 'debug', '>= 1.0.0'
