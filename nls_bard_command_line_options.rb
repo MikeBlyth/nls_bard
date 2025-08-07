@@ -12,6 +12,7 @@ class Optparse
     options = OpenStruct.new
     options.summary = []
     options.download = []
+    options.mark_downloaded = []
     options.getnew = 0
     options.title = ''
     options.author = ''
@@ -95,6 +96,11 @@ class Optparse
       # Download books
       opts.on('-d', '--download x,y,z', Array, 'Download books by key') do |list|
         options.download = list
+      end
+
+      # Mark books as downloaded without actually downloading
+      opts.on('-X', '--mark-downloaded x,y,z', Array, 'Mark books as downloaded without actually downloading') do |list|
+        options.mark_downloaded = list
       end
 
       # Debug

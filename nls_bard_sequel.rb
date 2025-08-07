@@ -190,6 +190,52 @@ class BookDatabase
     end
   end
 
+  def has_read_author?(author_field)
+    # Check if we have read books by any of the authors (has_read > 0)
+    return false if author_field.nil? || author_field.strip.empty?
+    
+    require_relative 'name_parse'
+    
+    # Split multiple authors by semicolon (like in books table)
+    author_list = author_field.split(';').map(&:strip).reject(&:empty?)
+    
+    author_list.each do |author_name|
+      parsed = parse_author_name(author_name)
+      next if parsed[:last].empty?
+      
+      # Check if this author has read count > 0
+      author_count = @DB[:authors].where(
+        last_name: parsed[:last],
+        first_name: parsed[:first],
+        middle_name: parsed[:middle]
+      ).get(:has_read)
+      
+      return true if author_count && author_count > 0
+    end
+    
+    false
+  end
+
+  def parse_author_name(name)
+    return {last: '', first: '', middle: ''} if name.nil? || name.strip.empty?
+    
+    name = name.strip
+    
+    # Handle corporate/organizational authors
+    if name.include?('(') || name.include?('Society') || name.include?('Association') || 
+       name.include?('Institute') || name.include?('Organization') || name.include?('Inc.') ||
+       name.include?('Corp.') || name.include?('Company') || name.include?('Press')
+      return {last: name[0..19], first: '', middle: ''}
+    end
+    
+    parsed = name_parse(name)
+    {
+      last: (parsed[:last] || '')[0..19],
+      first: (parsed[:first] || '')[0..19], 
+      middle: (parsed[:middle] || '')[0..19]
+    }
+  end
+
   def list_wish # List the wishlist
     puts 'Wish list:'
     @wish.order(:title).each do |w|
@@ -200,7 +246,11 @@ class BookDatabase
                       else
                         w[:author]  # Use as-is if no comma
                       end
-      puts "\t\"\033[36m#{w[:title]}\033[0m\" by #{author_display}"
+      
+      # Check if I have read books by this author (has_read > 0)
+      author_indicator = has_read_author?(w[:author]) ? "\033[92mA\033[0m " : "  "
+      
+      puts "\t#{author_indicator}\"\033[96m#{w[:title]}\033[0m\" by #{author_display}"
     end
   end
 

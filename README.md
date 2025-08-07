@@ -7,6 +7,7 @@ The purpose of this app is to make it more convenient to find and download audio
 *   Keeps a wishlist and checks it against books that exist in the database
 *   Provides tools for searching with fuzzy matching support
 *   Facilitates downloading titles
+*   Tracks author reading statistics with automatic count updates
 *   Includes robust network error handling with automatic retry mechanisms
 
 This project runs inside Docker to create a stable, consistent environment and avoid issues with local changes to Ruby, Chrome, or system dependencies.
@@ -70,29 +71,28 @@ This method downloads pre-built Docker images for faster setup:
 
 5.  **Set Up Database:**
     ```bash
-    # Start database service
+    # Start database service (if not already running)
     docker-compose up -d db
     
-    # Wait a few seconds for database to initialize
-    sleep 10
-    
-    # Test the setup
-    ./nls-dev.sh -h
+    # Ensure the development database is populated with initial data
+    # This script will automatically restore from a known backup if the DB is empty.
+    ./populate_dev_db.sh
     ```
-
-6.  **Restore Database from Backup (if you have one):**
+    
+6.  **Restore Database from Backup (Manual):**
     ```bash
-    # If you have a database backup file in db_dump/ folder:
-    ./restore_database.sh db_dump/nls_bard_backup_YYYYMMDD_HHMMSS.sql
+    # If you need to manually restore a specific backup to the development database:
+    ./restore_database.sh --dev db_dump/dev/dev-nls_bard_dev_backup_YYYYMMDD_HHMMSS.sql
     
-    # Or start with fresh database (will be populated on first scrape)
+    # To restore a production backup to the production database:
+    ./restore_database.sh --prod db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
     ```
-
+    
 7.  **Verify Installation:**
     ```bash
     # Test basic functionality
     ./nls-dev.sh -w                    # Should show empty wishlist or existing items
-    ./nls-dev.sh -f -t "test"          # Should search database (may be empty initially)
+    ./nls-dev.sh -f -t "test"          # Should search database (now populated)
     ```
 
 ### Method 2: Build from Source (Advanced Users)
@@ -118,7 +118,7 @@ If moving from an existing installation to a new system:
 
 1.  **On Old System - Create Backup:**
     ```bash
-    ./backup_database.sh
+    ./backup_database.sh --prod
     # This creates: db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
     ```
 
@@ -128,12 +128,12 @@ If moving from an existing installation to a new system:
 
 3.  **On New System - Follow Method 1 above, then:**
     ```bash
-    # Restore your data
-    ./restore_database.sh db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
+    # Restore your data to the production environment
+    ./restore_database.sh --prod db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
     
     # Verify restoration
-    ./nls-dev.sh -w                    # Check wishlist
-    ./nls-dev.sh -f -t "some title"    # Search for known book
+    ./nls-prod.sh -w                    # Check wishlist
+    ./nls-prod.sh -f -t "some title"    # Search for known book
     ```
 
 ### Initial Database Population
@@ -156,11 +156,19 @@ The project provides several convenience scripts for different environments:
 - **`./nls-prod.sh [command]`** - Production environment (self-contained image)
 - **`./rebuild-prod.sh`** - Rebuild production image after code changes
 
-### Development vs Production Environments
+### Database Environments
 
-- **Development**: Use `./nls-dev.sh` for testing and development. Code changes are immediately available.
-- **Production**: Use `./nls-prod.sh` for stable operations. Requires `./rebuild-prod.sh` after code changes.
-- The scripts automatically prevent running both environments simultaneously.
+The application uses three separate database environments to prevent corruption and enable safe development:
+
+- **Production Environment** (`./nls-prod.sh`): Stable data for actual use. Database stored on host at `/home/mike/postgres-data-prod`
+- **Development Environment** (`./nls-dev.sh`): Testing and development data. Uses Docker named volume `nls-bard_postgres_data_dev`
+- **VS Code Dev Container**: Debugging and IDE integration. Uses Docker named volume `nls-bard-dev-container_postgres_data_dev`
+
+**Key Benefits:**
+- **No Corruption Risk**: Each environment has its own PostgreSQL instance and data storage
+- **Safe Environment Switching**: Can run different environments simultaneously without conflicts
+- **Debugging Support**: VS Code container database can be populated with subset of data for efficient debugging
+- **Data Isolation**: Production data is completely protected from development activities
 
 ### Running Commands
 
@@ -177,6 +185,12 @@ The project provides several convenience scripts for different environments:
 
 # Interactive shell for development
 ./nls-dev.sh                             # Opens bash shell in container
+
+# Running a specific script in a container (e.g., for database population/updates)
+# For development:
+docker-compose run --rm --entrypoint="" app ruby populate_authors_table.rb
+# For production:
+docker-compose -f docker-compose.prod.yml run --rm --entrypoint="" app ruby populate_authors_table.rb
 ```
 
 ## Book Updates
@@ -214,6 +228,13 @@ Find a title, can use title and/or author: `-f -t "Tom Sawyer" -a Twain [-v]`
 - 
 Download a title: `-d DB1234567`
 
+Mark a title as downloaded (without actually downloading): `-X DB1234567` or `--mark-downloaded DB1234567`
+- Use this when you downloaded a book from another system but want to update your records
+- Both download and mark-downloaded options will:
+  - Update the book's status to "read" and set download date
+  - Remove the book from your wishlist
+  - Increment the author's read count in the authors table
+
 Downloads are saved to the directory specified in your `.env` file (`WIN_DOWNLOADS_PATH` variable), typically your Windows Downloads folder when using WSL.
 
 ### Other Actions
@@ -236,8 +257,10 @@ Usage: nls_bard.rb [actions]
 
     -d, --download x,y,z		Download books by key
 
+    -X, --mark-downloaded x,y,z	Mark books as downloaded without actually downloading
+
     --[no-]debug			Debug (debug gem must be required in nls_bard.rb and 
-    				debugger statement(s) included as breakpoings)
+    					debugger statement(s) included as breakpoings)
 
     -u, --update			Update ratings
 
@@ -270,7 +293,9 @@ The project includes several shell scripts for different operations:
 - **`./nls-prod.sh`** - Production environment wrapper  
 - **`./rebuild-prod.sh`** - Rebuild production Docker image
 - **`./backup_database.sh`** - Create comprehensive database backup
+- **`./backup_dev_db.sh`** - Backup development database from WSL command line
 - **`./restore_database.sh <file>`** - Restore database from backup
+- **`./populate_vscode_db.sh`** - Populate VS Code Dev Container database
 
 ### Common Operations
 
@@ -284,15 +309,48 @@ The project includes several shell scripts for different operations:
 ```
 
 **Database Operations:**
+
+The application maintains three separate database environments to prevent corruption and enable safe development:
+
+1. **Production Database** - Stable data for actual use
+2. **Development Database** - Testing and development data  
+3. **VS Code Dev Container Database** - Debugging and IDE integration
+
 ```bash
-# Create backup
+# === BACKUP OPERATIONS ===
+
+# Backup production database
+./backup_database.sh --prod
+# Creates: db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
+
+# Backup development database  
+./backup_dev_db.sh
+# Creates: db_dump/dev/dev-nls_bard_dev_backup_YYYYMMDD_HHMMSS.sql
+
+# Legacy backup (detects environment automatically)
 ./backup_database.sh
 
-# Restore from backup  
-./restore_database.sh db_dump/nls_bard_backup_20250804_192120.sql
+# === RESTORE OPERATIONS ===
 
-# Interactive database access
+# Restore to production database
+./restore_database.sh --prod db_dump/nls_bard_complete_backup_20250804_192120.sql
+
+# Restore to development database
+./restore_database.sh --dev db_dump/dev/dev-nls_bard_dev_backup_20250806_141052.sql
+
+# Populate VS Code Dev Container database (run from WSL, not inside VS Code)
+./populate_vscode_db.sh
+
+# === INTERACTIVE ACCESS ===
+
+# Production database
+docker-compose -f docker-compose.prod.yml exec db psql -U mike -d nlsbard
+
+# Development database  
 docker-compose exec db psql -U mike -d nlsbard
+
+# VS Code Dev Container database
+docker exec -i nls-bard-dev-container-db-1 psql -U mike -d nlsbard
 ```
 
 **Running Interactive Shell:**
@@ -311,7 +369,7 @@ The URL for a given item like DB128900 is https://nlsbard.loc.gov/bard2-web/sear
 
 Go the URL for that page and click on the link like
 
-`<a href="/bard2-web/download/DB128900/?filename=DB-Baldacci_David%2520Strangers%2520in%2520time%253A%2520a%2520World%2520War%2520II%2520novel%2520DB128900&amp;prevPage=Strangers%20in%20time%3A%20a%20World%20War%20II%20novel%20DB128900&amp;from=%2Fsearch%2FDB128900%2F" role="link"><span>Download <span>Strangers in time: a World War II novel</span></span></a>`
+`<a href="/bard2-web/download/DB128900/?filename=DB-Baldacci_David%2520Strangers%2520in%2520time%253A%2520a%2520World%2520War%2520II%2520novel%2520DB128900&amp;prevPage=Strangers%2520in%2520time%253A%2520a%2520World%2520War%2520II%2520novel%2520DB128900&amp;from=%2Fsearch%2FDB128900%2F" role="link"><span>Download <span>Strangers in time: a World War II novel</span></span></a>`
 
 ## Get newly added books: iterate_update_pages
 Entry URL = https://nlsbard.loc.gov/bard2-web/login/

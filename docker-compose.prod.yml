@@ -16,7 +16,7 @@ services:
       POSTGRES_USER: mike
       POSTGRES_DB: nlsbard
     volumes:
-      - /home/mike/postgres-data:/var/lib/postgresql/data  # Direct path
+      - /home/mike/postgres-data-prod:/var/lib/postgresql/data  # Separate prod database volume
       - ./db_init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on empty database
     restart: unless-stopped
 

@@ -45,6 +45,7 @@ def create_authors_table(db)
     varchar :last_name, size: 20, null: false
     varchar :first_name, size: 20, null: false  
     varchar :middle_name, size: 20, null: false
+    smallint :has_read, default: 0
     
     # Unique constraint on all three fields
     unique [:last_name, :first_name, :middle_name]

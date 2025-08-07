@@ -371,14 +371,74 @@ def list_books_by_filter(filter, options)
 end
 
 def update_book_records(key, title)
+  mark_book_as_read(key, "Updated records for book: #{title} (#{key})")
+end
+
+def update_author_read_count(book)
+  # Parse author names and increment their has_read count
+  return if book[:author].nil? || book[:author].strip.empty?
+  
+  require_relative 'name_parse'
+  
+  # Split multiple authors by semicolon
+  author_list = book[:author].split(';').map(&:strip).reject(&:empty?)
+  
+  author_list.each do |author_name|
+    parsed = parse_author_name(author_name)
+    next if parsed[:last].empty?
+    
+    # Increment the author's has_read count using direct database access
+    rows_updated = @mybooks.DB[:authors].where(
+      last_name: parsed[:last],
+      first_name: parsed[:first],
+      middle_name: parsed[:middle]
+    ).update(Sequel.expr(:has_read) + 1)
+    
+    if rows_updated > 0
+      puts "  Updated read count for author: #{parsed[:first]} #{parsed[:middle]} #{parsed[:last]}"
+    end
+  end
+end
+
+def parse_author_name(name)
+  return {last: '', first: '', middle: ''} if name.nil? || name.strip.empty?
+  
+  name = name.strip
+  
+  # Handle corporate/organizational authors
+  if name.include?('(') || name.include?('Society') || name.include?('Association') || 
+     name.include?('Institute') || name.include?('Organization') || name.include?('Inc.') ||
+     name.include?('Corp.') || name.include?('Company') || name.include?('Press')
+    return {last: name[0..19], first: '', middle: ''}
+  end
+  
+  parsed = name_parse(name)
+  {
+    last: (parsed[:last] || '')[0..19],
+    first: (parsed[:first] || '')[0..19], 
+    middle: (parsed[:middle] || '')[0..19]
+  }
+end
+
+def mark_book_as_read(key, success_message = nil)
+  # Validate the key format case-insensitively.
+  return puts "Invalid key format: '#{key}'. Not a standard book ID." unless key =~ /\A[A-Z]{1,3}[0-9]+\z/i
+
+  key.upcase! # Convert to uppercase for consistency
+
   book = @mybooks.get_book(key)
   if book
     @books.filter(key: book[:key]).update(has_read: true, date_downloaded: Date.today)
     @mybooks.wish_delete(key: book[:key])
-    puts "Updated records for book: #{title} (#{key})"
+    update_author_read_count(book)
+    puts success_message || "Marked as downloaded: #{book[:title]} (#{key})"
   else
-    puts "Book with key #{key} not found in the database. Consider adding: #{title}"
+    puts "Book with key #{key} not found in the database."
   end
+end
+
+def mark_as_downloaded(key)
+  mark_book_as_read(key)
 end
 
 def initialize_database
@@ -598,9 +658,12 @@ def handle_command(command_line)
             # Truncate title at 80 characters and colorize light blue
             title = book[:title] || ""
             truncated_title = title.length > 80 ? title[0..76] + "..." : title
-            colored_title = "\033[94m#{truncated_title}\033[0m"  # Light blue color
+            colored_title = "\033[96m#{truncated_title}\033[0m"  # Bright cyan color
             
-            puts "  #{key_field} | #{colored_title} by #{book[:author]} | ⭐ #{book[:stars]} (#{book[:ratings]} ratings)"
+            # Check if I have read books by this author (has_read > 0)
+            author_indicator = @mybooks.has_read_author?(book[:author]) ? "\033[92mA\033[0m " : "  "
+            
+            puts "  #{author_indicator}#{key_field} | #{colored_title} by #{book[:author]} | ⭐ #{book[:stars]} (#{book[:ratings]} ratings)"
           end
         end
         puts ""
@@ -619,6 +682,11 @@ def handle_command(command_line)
   if options.download != []
     puts "Downloading #{options.download}"
     options.download.each { |key| download(key) }
+  end
+
+  if options.mark_downloaded != []
+    puts "Marking as downloaded: #{options.mark_downloaded}"
+    options.mark_downloaded.each { |key| mark_as_downloaded(key) }
   end
 
   update_ratings if options.update_ratings

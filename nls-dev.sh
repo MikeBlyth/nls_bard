@@ -12,18 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 # Ensure we are in the project root so docker-compose can find its files.
 cd "$SCRIPT_DIR"
 
-# Check if production environment is running
-if docker-compose -f docker-compose.prod.yml ps --services --filter "status=running" | grep -q "db"; then
-    echo "❌ Cannot start development environment: production environment is already running."
-    echo ""
-    echo "To switch to development:"
-    echo "  docker-compose -f docker-compose.prod.yml down"
-    echo "  ./nls-dev.sh [command]"
-    echo ""
-    echo "To use production instead:"
-    echo "  ./nls-prod.sh [command]"
-    exit 1
-fi
+# Ensure the development database is populated
+./populate_dev_db.sh
 
 COMMAND_TO_RUN=()
 if [ $# -eq 0 ]; then
