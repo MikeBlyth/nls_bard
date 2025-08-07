@@ -187,7 +187,7 @@ class BookDatabase
       existing_wish = @wish.where(Sequel.ilike(:title, '%' + title + '%') & Sequel.ilike(:author, '%' + author + '%')).first
       if existing_wish.nil?
         @wish.insert(title:, author:, key: b[:key])
-        @wishlist_manager&.sync_add_item(title, author) if @wishlist_manager&.sheets_enabled?
+        sync_add_item(title, author) if sheets_enabled?
       elsif existing_wish[:date_downloaded]
         puts "#{title} by #{author} was already downloaded on #{existing_wish[:date_downloaded]}"
       else
@@ -199,7 +199,7 @@ class BookDatabase
     existing_item = @wish.where(Sequel.ilike(:title, '%' + title + '%') & Sequel.ilike(:author, '%' + author + '%')).first
     if existing_item.nil?
       @wish.insert(title:, author:) # Insert it
-      @wishlist_manager&.sync_add_item(title, author) if @wishlist_manager&.sheets_enabled?
+      sync_add_item(title, author) if sheets_enabled?
     elsif existing_item[:date_downloaded]
       puts "#{title} by #{author} was already downloaded on #{existing_item[:date_downloaded]}"
     else
@@ -324,7 +324,7 @@ class BookDatabase
     end
   end
 
-  def check_for_wishlist_matches(specific_books = nil)
+    def check_for_wishlist_matches(specific_books = nil)
     if specific_books && specific_books.any?
       puts "Checking for wishlist matches in #{specific_books.count} newly added books..."
     else
@@ -395,6 +395,8 @@ class BookDatabase
     
     puts 'No matches found for wishlist items.' unless found_any
   end
+
+  
 
   def insert_book(newbook)
     # This method performs an "upsert" (update or insert) operation.
@@ -628,33 +630,240 @@ class BookDatabase
     end
   end
 
-  # Wishlist Manager Integration
-  def get_wishlist_manager
-    unless @wishlist_manager
-      require_relative 'lib/wishlist_manager'
-      @wishlist_manager = WishlistManager::SyncManager.new(self)
-    end
-    @wishlist_manager
+  # Wishlist Manager Integration  
+  def mark_book_read_in_sheets(title, author)
+    sync_mark_read(title, author)
   end
 
   def enable_sheets_sync
-    get_wishlist_manager.enable_sheets_sync
+    return if @wishlist_manager
+    
+    begin
+      require_relative 'google_sheets_sync'
+      @wishlist_manager = GoogleSheetsSync.new
+      puts "✓ Google Sheets integration enabled"
+    rescue LoadError => e
+      puts "❌ Could not load Google Sheets sync: #{e.message}"
+      @wishlist_manager = nil
+    rescue => e
+      puts "❌ Error initializing Google Sheets sync: #{e.message}"
+      @wishlist_manager = nil
+    end
   end
 
-  def disable_sheets_sync
-    get_wishlist_manager.disable_sheets_sync
+  def sheets_enabled?
+    !@wishlist_manager.nil?
   end
 
   def sync_full_wishlist_to_sheets
-    get_wishlist_manager.sync_full_wishlist
+    unless sheets_enabled?
+      puts "❌ Google Sheets sync not enabled"
+      return false
+    end
+    
+    puts "📊 Starting full wishlist sync with match information..."
+    
+    # Get current matches
+    matches = get_wishlist_matches
+    puts "🔍 Found #{matches.count} matches in database"
+    
+    # Prepare sheet data with match information
+    sheet_data = prepare_sheet_data_with_matches(matches)
+    puts "📤 Syncing #{sheet_data.count} items to Google Sheets..."
+    
+    @wishlist_manager.sync_to_sheet(sheet_data)
   end
 
-  def mark_book_read_in_sheets(title, author)
-    get_wishlist_manager.mark_book_read(title, author)
+  def sync_add_item(title, author)
+    return unless sheets_enabled?
+    @wishlist_manager.add_to_sheet(title, author)
   end
 
-  def sync_after_book_session(newly_added_books = nil)
-    get_wishlist_manager.sync_after_book_session(newly_added_books)
+  def sync_mark_read(title, author)
+    return unless sheets_enabled?
+    @wishlist_manager.mark_book_read_in_sheet(title, author)
+  end
+
+  def get_wishlist_manager
+    self
+  end
+
+  def sync_after_book_session(new_books = nil)
+    unless sheets_enabled?
+      puts "❌ Google Sheets sync not enabled"
+      return false
+    end
+
+    puts "📊 Simple 4-step wishlist sync..."
+    
+    # Step 1: Read the sheet
+    puts "1️⃣ Read the sheet"
+    sheet_items = @wishlist_manager.get_sheet_wishlist
+    puts "   Read #{sheet_items.count} items from Google Sheet"
+    
+    # Step 2: Update the list including date read
+    puts "2️⃣ Update the list including date read"
+    wishlist = build_wishlist_from_sheet_and_database(sheet_items)
+    puts "   Updated wishlist: #{wishlist.count} items (#{wishlist.count { |item| item[:read] }} read)"
+    
+    # Step 3: Search for matches (update list if match found)
+    puts "3️⃣ Search for matches"
+    find_and_add_matches(wishlist, new_books)
+    match_count = wishlist.count { |item| !item[:matched_title].nil? }
+    puts "   Found #{match_count} matches"
+    
+    # Step 4: Rewrite the list to sheet
+    puts "4️⃣ Rewrite the list to sheet"
+    @wishlist_manager.sync_to_sheet(wishlist.reject { |item| item[:read] })
+    unread_count = wishlist.count { |item| !item[:read] }
+    puts "   Wrote #{unread_count} unread items to sheet"
+    
+    puts "✅ Sync completed"
+    true
+  end
+
+  def get_wishlist_matches
+    matches = []
+    
+    # Only check unread wishlist items for matches
+    @wish.where(date_downloaded: nil).each do |wish_item|
+      # Find matching books in database
+      matched_books = get_by_hash({
+        title: wish_item[:title],
+        author: wish_item[:author]
+      }).all
+      
+      matched_books.each do |book|
+        matches << {
+          wish_title: wish_item[:title],
+          wish_author: wish_item[:author],
+          book_title: book[:title],
+          book_author: book[:author],
+          book_key: book[:key],
+          downloaded: false  # Only including unread items
+        }
+      end
+    end
+    
+    matches
+  end
+
+  def build_wishlist_from_sheet_and_database(sheet_items)
+    # Build a comprehensive wishlist combining sheet data and database
+    wishlist = []
+    
+    # Start with all unread database items
+    @wish.where(date_downloaded: nil).each do |db_item|
+      wishlist << {
+        title: db_item[:title],
+        author: db_item[:author],
+        read: false,
+        matched_title: nil,
+        matched_author: nil,
+        book_key: nil
+      }
+    end
+    
+    # Process sheet items
+    sheet_items.each do |sheet_item|
+      next if sheet_item[:title].empty? || sheet_item[:author].empty?
+      
+      # Find if this item is already in our wishlist
+      existing = wishlist.find { |w| 
+        w[:title].downcase == sheet_item[:title].downcase && 
+        w[:author].downcase == sheet_item[:author].downcase 
+      }
+      
+      if existing
+        # Update read status from sheet
+        existing[:read] = sheet_item[:read]
+        
+        # If marked as read in sheet, also update database
+        if sheet_item[:read]
+          @wish.where(Sequel.ilike(:title, sheet_item[:title]) & 
+                     Sequel.ilike(:author, sheet_item[:author]))
+               .update(date_downloaded: Date.today)
+        end
+      else
+        # New item from sheet - add to database and wishlist
+        insert_wish(sheet_item)
+        wishlist << {
+          title: sheet_item[:title],
+          author: sheet_item[:author],
+          read: sheet_item[:read],
+          matched_title: nil,
+          matched_author: nil,
+          book_key: nil
+        }
+      end
+    end
+    
+    wishlist.sort_by { |item| item[:title].downcase }
+  end
+
+  def find_and_add_matches(wishlist, new_books = nil)
+    # Search for matches in the book database
+    wishlist.each do |wish_item|
+      next if wish_item[:read] # Skip read items
+      
+      # Find matching books
+      matched_books = get_by_hash({
+        title: wish_item[:title],
+        author: wish_item[:author]
+      }).all
+      
+      # Take the first match if found
+      if matched_books.any?
+        match = matched_books.first
+        wish_item[:matched_title] = match[:title]
+        wish_item[:matched_author] = match[:author]
+        wish_item[:book_key] = match[:key]
+      end
+    end
+  end
+
+  def prepare_sheet_data_with_matches(matches)
+    # Create a map of wishlist items with their match status
+    wish_map = {}
+    
+    # First, add only unread wishlist items (exclude downloaded/read items)
+    @wish.where(date_downloaded: nil).each do |item|
+      key = "#{item[:title].downcase}|#{item[:author].downcase}"
+      wish_map[key] = {
+        title: item[:title],
+        author: item[:author],
+        read: false,  # Only including unread items
+        matched_title: nil,
+        matched_author: nil,
+        book_key: nil
+      }
+    end
+    
+    # Then update with match information
+    matches.each do |match|
+      key = "#{match[:wish_title].downcase}|#{match[:wish_author].downcase}"
+      if wish_map[key]
+        wish_map[key][:matched_title] = match[:book_title]
+        wish_map[key][:matched_author] = match[:book_author]
+        wish_map[key][:book_key] = match[:book_key]
+      end
+    end
+    
+    # Count items with matches for reporting
+    matched_count = wish_map.values.count { |item| !item[:matched_title].nil? }
+    puts "   📋 #{wish_map.size} total wishlist items, #{matched_count} with matches"
+    
+    # Convert to array format for sheet with separate columns, sorted alphabetically by title
+    wish_map.values.map do |item|
+      {
+        title: item[:title],           # Original wishlist title
+        author: item[:author],         # Original wishlist author
+        read: item[:read],             # Read status
+        matched_title: item[:matched_title],   # BARD book title (if found)
+        matched_author: item[:matched_author], # BARD book author (if found)
+        book_key: item[:book_key]      # BARD book key (if found)
+      }
+    end.sort_by { |item| item[:title].downcase }
   end
 
   private

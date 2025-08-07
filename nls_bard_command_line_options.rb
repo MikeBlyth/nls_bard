@@ -13,7 +13,7 @@ class Optparse
     options.summary = []
     options.download = []
     options.mark_downloaded = []
-    options.getnew = 0
+    options.getnew = false
     options.title = ''
     options.author = ''
     options.blurb = ''
@@ -49,8 +49,8 @@ class Optparse
       opts.separator 'Actions:'
 
       # Update with the latest books
-      opts.on('-g', '--getnew N', Integer, 'Update DB with books added in past N days') do |n|
-        options.getnew = n
+      opts.on('-g', '--getnew', 'Update DB with new books from site') do
+        options.getnew = true
       end
 
       # Find

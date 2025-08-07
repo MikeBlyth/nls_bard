@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker-compose:*)"
+      "Bash(docker-compose:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(./nls-dev.sh:*)"
     ],
     "deny": []
   }

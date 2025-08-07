@@ -36,6 +36,8 @@ services:
       NLS_BARD_USERNAME: ${NLS_BARD_USERNAME}
       NLS_BARD_PASSWORD: ${NLS_BARD_PASSWORD}
       CONTAINER_DOWNLOAD_PATH: /home/appuser/Downloads
+      # Production environment flag for Google Sheets integration
+      BARD_ENVIRONMENT: production
     volumes:
       # Mount the host's download path into the container for consistency with dev.
       - ${WIN_DOWNLOADS_PATH}:/home/appuser/Downloads

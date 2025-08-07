@@ -220,12 +220,12 @@ def iterate_pages(start_letter)
   save_resume_mark('!', 9999) # Mark the A-Z scrape as complete
 end
 
-def iterate_update_pages(days)
+def iterate_update_pages
   BardSessionManager.initialize_nls_bard_chromium
   @processed_keys_this_session = Set.new # Track keys processed in this run to handle duplicates across pages.
 
   # Navigate to the initial "recently added" page.
-  # The `days` parameter is noted as not working for the new site.
+  # Gets whatever the site considers "new" books
   initial_url = 'https://nlsbard.loc.gov/bard2-web/search/results/recently-added/?language=en&format=all&type=book'
   
   with_bard_retry("navigate to recently added page") do
@@ -320,9 +320,9 @@ def read_all
   iterate_pages(letter)
 end
 
-def read_updates(days)
+def read_updates
   @outfile = File.open('output/nls_bard_books_updates.txt', 'a') # append to existing file
-  iterate_update_pages(days)
+  iterate_update_pages
 end
 
 def update_years # Try to find publication year for DB entries which don't have it
@@ -561,17 +561,17 @@ def handle_command(command_line)
   filters[:key] = options.key.upcase
   puts 'filters loaded' if $debug
 
-  if options.getnew > 0
-    puts "getting books added in past #{options.getnew} days"
-    read_updates(options.getnew)
+  if options.getnew
+    puts "Getting new books from site"
+    read_updates
     
     # Get books added today for wishlist checking and Google Sheets sync
     today_books = @mybooks.books.where(date_added: Date.today).all
     
     # Enable Google Sheets sync for post-session processing
-    sheets_enabled = @mybooks.get_wishlist_manager.enable_sheets_sync
+    @mybooks.enable_sheets_sync
     
-    if sheets_enabled
+    if @mybooks.sheets_enabled?
       # Perform full bidirectional sync with Google Sheets
       @mybooks.sync_after_book_session(options.check_all_wishlist ? nil : today_books)
     else
@@ -596,13 +596,24 @@ def handle_command(command_line)
   if options.wish
     author = filters[:author]
     if filters[:title] > ''
+      # Enable Google Sheets sync for wishlist operations
+      @mybooks.enable_sheets_sync
 
       # Preserve the full author name as entered
       filters[:author] = author
       @mybooks.insert_wish(filters)
-    else # No auth/title given, so just list
-      @mybooks.list_wish
-      @mybooks.check_for_wishlist_matches
+    else # No auth/title given, so do full bidirectional sync
+      # Enable Google Sheets sync for bidirectional sync
+      @mybooks.enable_sheets_sync
+      
+      if @mybooks.sheets_enabled?
+        # Do full bidirectional sync: read sheet → add new items → find matches → write back
+        @mybooks.sync_after_book_session
+      else
+        # Fallback to local display if sheets not available
+        @mybooks.list_wish
+        @mybooks.check_for_wishlist_matches
+      end
     end
   end
 

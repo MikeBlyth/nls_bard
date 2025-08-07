@@ -29,6 +29,8 @@ services:
       POSTGRES_USER: mike
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       CONTAINER_DOWNLOAD_PATH: /home/chrome/Downloads
+      # Development environment flag for Google Sheets integration
+      BARD_ENVIRONMENT: development
     volumes:
       - .:/app
       - db_dump_dev:/app/db_dump # Map dev dumps to a separate directory
