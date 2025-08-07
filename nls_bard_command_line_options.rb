@@ -218,7 +218,17 @@ class Optparse
       end
     end
 
-    opt_parser.parse!(args)
+    begin
+      opt_parser.parse!(args)
+    rescue OptionParser::InvalidOption => e
+      puts "❌ Unknown option: #{e.message}"
+      puts "Use -h or --help to see available options"
+      return nil
+    rescue => e
+      puts "❌ Error parsing command: #{e.message}"
+      return nil
+    end
+    
     options
   end # parse()
 end # class OptparseExample

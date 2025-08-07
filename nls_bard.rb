@@ -275,6 +275,37 @@ def process_book_entry(entry)
   # This can happen on the "recently added" pages.
   return if @processed_keys_this_session&.include?(book[:key])
 
+  # Define patterns for non-English languages in categories
+  non_english_patterns = [
+    /Spanish Language/i,
+    /French Language/i,
+    /German Language/i,
+    /Chinese Language/i,
+    /Japanese Language/i,
+    /Russian Language/i,
+    /Arabic Language/i,
+    /Portuguese Language/i,
+    /Italian Language/i,
+    /Korean Language/i,
+    /Vietnamese Language/i,
+    /Hindi Language/i,
+    /Urdu Language/i,
+    /Tagalog Language/i,
+    /Farsi Language/i,
+    /Persian Language/i,
+    /Hebrew Language/i,
+    /Yiddish Language/i,
+    /Latin Language/i,
+    /Greek Language/i,
+    /Multilingual/i
+  ]
+
+  # Check if any non-English language pattern is present in categories
+  if non_english_patterns.any? { |pattern| book[:categories] =~ pattern }
+    puts "Skipping non-English book: #{book[:title]} (#{book[:key]}) - Language detected in categories."
+    return
+  end
+
   # We only want to process and add books that are new to our database.
   # If a book already exists, we skip it to avoid unnecessary processing
   # like fetching ratings or performing database updates. The `insert_book` method
@@ -547,6 +578,9 @@ def handle_command(command_line)
          end
 
   options = Optparse.parse(args) # Parse, label the options
+  
+  # Return early if parsing failed (invalid command)
+  return if options.nil?
 
   # Runtime options
   $verbose = options.verbose
@@ -799,7 +833,13 @@ loop do
   break if args.empty? || args[0] =~ /(exit)|(end)|(quit)/i
 
   Reline::HISTORY << command_line
-  handle_command(args)
+  
+  begin
+    handle_command(args)
+  rescue => e
+    puts "❌ Error executing command: #{e.message}"
+    puts "Use -h or --help to see available options"
+  end
 end
 
 wrap_up
