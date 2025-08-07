@@ -188,10 +188,20 @@ class BookDatabase
       if existing_wish.nil?
         @wish.insert(title:, author:, key: b[:key])
         sync_add_item(title, author) if sheets_enabled?
+        
+        # If the book has already been read, mark it as read in the Google Sheet
+        if b[:has_read] && sheets_enabled?
+          mark_book_read_in_sheets(title, author)
+        end
       elsif existing_wish[:date_downloaded]
         puts "#{title} by #{author} was already downloaded on #{existing_wish[:date_downloaded]}"
       else
         puts "#{title} by #{author} is already in the wishlist"
+        
+        # If the book has already been read and it's in wishlist but not marked read, mark it
+        if b[:has_read] && sheets_enabled? && !existing_wish[:date_downloaded]
+          mark_book_read_in_sheets(title, author)
+        end
       end
       return
     end
@@ -310,8 +320,14 @@ class BookDatabase
       print 'Are you sure you want to remove this item from the wishlist? (y/n) '
       confirmation = gets.chomp.downcase
       if confirmation == 'y'
-        matches.delete
-        puts 'Item removed from wishlist.'
+        # Mark as read (downloaded) with today's date instead of deleting
+        matches.update(date_downloaded: Date.today)
+        puts 'Item marked as read (will no longer appear in wishlist).'
+        
+        # Mark as read in Google Sheets if sync is enabled
+        if sheets_enabled?
+          mark_book_read_in_sheets(item[:title], item[:author])
+        end
       else
         puts 'Removal cancelled.'
       end
@@ -655,6 +671,29 @@ class BookDatabase
     !@wishlist_manager.nil?
   end
 
+  # Sync interesting books to Google Sheets 'Interesting' page
+  def sync_interesting_books_to_sheets(options = {})
+    return unless sheets_enabled?
+    
+    # Get interesting books using the same criteria as -i command
+    min_stars = options[:min_stars] || 3.8
+    min_ratings = options[:min_ratings] || 1000
+    min_year = options[:min_year] || 0
+    
+    interesting_books = find_interesting_books(
+      minimum_year: min_year,
+      minimum_stars: min_stars,
+      minimum_ratings: min_ratings
+    ).all
+    
+    return if interesting_books.empty?
+    
+    # Sort by stars ascending (same as -i command)
+    interesting_books.sort_by! { |book| book[:stars] || 0 }
+    
+    @wishlist_manager.sync_interesting_books_to_sheet(interesting_books)
+  end
+
   def sync_full_wishlist_to_sheets
     unless sheets_enabled?
       puts "❌ Google Sheets sync not enabled"
@@ -818,6 +857,9 @@ class BookDatabase
         wish_item[:matched_title] = match[:title]
         wish_item[:matched_author] = match[:author]
         wish_item[:book_key] = match[:key]
+        
+        # Display the match
+        puts "   📚 Match found: '#{wish_item[:title]}' → '#{match[:title]}' (#{match[:key]})"
       end
     end
   end

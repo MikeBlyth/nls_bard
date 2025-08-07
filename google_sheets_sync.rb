@@ -225,6 +225,60 @@ class GoogleSheetsSync
     puts "⚠️  Manual removal from Google Sheet required for: '#{title}'"
   end
 
+  # Sync interesting books to Google Sheet 'Interesting' page
+  def sync_interesting_books_to_sheet(interesting_books)
+    puts "📊 Writing #{interesting_books.count} interesting books to Google Sheet 'Interesting' page..."
+    
+    # Prepare data for sheet (include header)
+    sheet_data = [['Category', 'Key', 'Title', 'Author', 'Rating', 'Ratings Count']]
+    
+    interesting_books.each do |book|
+      # Extract first category from categories string
+      categories = book[:categories] || ""
+      first_category = categories.split(/[,;]/).first&.strip || "Uncategorized"
+      
+      sheet_data << [
+        first_category,
+        book[:key] || '',
+        book[:title] || '',
+        book[:author] || '',
+        book[:stars] || '',
+        book[:ratings] || ''
+      ]
+    end
+    
+    # Clear existing data and write new data to Interesting page
+    range = "Interesting!A:F"
+    
+    begin
+      # Clear the range first
+      clear_request = Google::Apis::SheetsV4::ClearValuesRequest.new
+      @service.clear_values(SHEET_ID, range, clear_request)
+      
+      # Write new data
+      value_range = Google::Apis::SheetsV4::ValueRange.new(
+        range: range,
+        values: sheet_data
+      )
+      
+      @service.update_spreadsheet_value(
+        SHEET_ID,
+        range,
+        value_range,
+        value_input_option: 'RAW'
+      )
+      
+      puts "   ✅ Updated Google Sheet 'Interesting' page with #{interesting_books.count} books"
+      true
+    rescue Google::Apis::Error => e
+      puts "   ❌ Error writing to Google Sheet 'Interesting' page: #{e.message}"
+      false
+    rescue => e
+      puts "   ❌ Unexpected error writing interesting books: #{e.message}"
+      false
+    end
+  end
+
   # Add a test method to manually set a read status for testing
   def set_read_status_for_testing(title_search, read_value = "8/7/25")
     range = "#{sheet_name}!A:F"

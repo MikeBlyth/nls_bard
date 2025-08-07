@@ -616,6 +616,9 @@ def handle_command(command_line)
         @mybooks.check_for_wishlist_matches(today_books) if today_books.any?
       end
     end
+    
+    # Sync interesting books to Google Sheets after scraping (without terminal output)
+    @mybooks.sync_interesting_books_to_sheets
   end
 
   if options.output > ''
@@ -643,6 +646,9 @@ def handle_command(command_line)
       if @mybooks.sheets_enabled?
         # Do full bidirectional sync: read sheet → add new items → find matches → write back
         @mybooks.sync_after_book_session
+        # Display the wishlist on terminal after sync
+        puts "📋 Displaying wishlist..."
+        @mybooks.list_wish
       else
         # Fallback to local display if sheets not available
         @mybooks.list_wish
@@ -739,6 +745,14 @@ def handle_command(command_line)
       puts "No books found matching the interesting criteria."
       puts "Try lowering the minimum stars or ratings, or check if you have desired categories set."
     end
+    
+    # Sync interesting books to Google Sheets after displaying
+    @mybooks.enable_sheets_sync
+    @mybooks.sync_interesting_books_to_sheets(
+      min_stars: options.min_stars,
+      min_ratings: options.min_ratings,
+      min_year: options.min_year
+    )
   end
 
   if options.backup
