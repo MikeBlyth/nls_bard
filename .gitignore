@@ -8,3 +8,5 @@
 /output/
 /db_dump/
 db_dump/database_dump.sql.zip.old
+google_credentials.json
+nls-bard-*.json
