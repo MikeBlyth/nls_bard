@@ -754,8 +754,11 @@ class BookDatabase
     wishlist = build_wishlist_from_sheet_and_database(sheet_items)
     puts "   Updated wishlist: #{wishlist.count} items (#{wishlist.count { |item| item[:read] }} read)"
     
-    # Step 3: Search for matches will be handled by check_for_wishlist_matches later
-    puts "3️⃣ Skip local matching (handled separately)"
+    # Step 3: Search for matches (update list with match data for sheets)
+    puts "3️⃣ Search for matches"
+    find_and_add_matches(wishlist, new_books)
+    match_count = wishlist.count { |item| !item[:matched_title].nil? }
+    puts "   Found #{match_count} matches"
     
     # Step 4: Rewrite the list to sheet
     puts "4️⃣ Rewrite the list to sheet"
@@ -823,6 +826,13 @@ class BookDatabase
         # Update read status from sheet
         existing[:read] = sheet_item[:read]
         
+        # Preserve match details from sheet if they exist
+        if sheet_item[:matched_title] && !sheet_item[:matched_title].empty?
+          existing[:matched_title] = sheet_item[:matched_title]
+          existing[:matched_author] = sheet_item[:matched_author]
+          existing[:book_key] = sheet_item[:book_key]
+        end
+        
         # If marked as read in sheet, also update database
         if sheet_item[:read]
           @wish.where(Sequel.ilike(:title, sheet_item[:title]) & 
@@ -836,9 +846,9 @@ class BookDatabase
           title: sheet_item[:title],
           author: sheet_item[:author],
           read: sheet_item[:read],
-          matched_title: nil,
-          matched_author: nil,
-          book_key: nil
+          matched_title: sheet_item[:matched_title],
+          matched_author: sheet_item[:matched_author],
+          book_key: sheet_item[:book_key]
         }
       end
     end

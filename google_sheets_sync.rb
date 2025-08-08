@@ -71,10 +71,18 @@ class GoogleSheetsSync
                   read_cell.match?(/\d+\/\d+\/\d+/) ||  # dates like 8/7/25
                   read_cell.match?(/\d+\-\d+\-\d+/)     # dates like 2025-08-07
         
+        # Extract match details from columns D, E, F
+        matched_title = row[3]&.strip || ''
+        matched_author = row[4]&.strip || ''
+        book_key = row[5]&.strip || ''
+        
         wishlist_items << {
           title: title,
           author: author,
-          read: is_read
+          read: is_read,
+          matched_title: matched_title.empty? ? nil : matched_title,
+          matched_author: matched_author.empty? ? nil : matched_author,
+          book_key: book_key.empty? ? nil : book_key
         }
       end
       
