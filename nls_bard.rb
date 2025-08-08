@@ -644,18 +644,17 @@ def handle_command(command_line)
       @mybooks.enable_sheets_sync
       
       if @mybooks.sheets_enabled?
-        # Do full bidirectional sync: read sheet → add new items → find matches → write back
+        # Do full bidirectional sync: read sheet → add new items → write back
         @mybooks.sync_after_book_session
         # Display the wishlist on terminal after sync
         puts "📋 Displaying wishlist..."
         @mybooks.list_wish
-        # Display formatted matches
-        @mybooks.check_for_wishlist_matches
       else
         # Fallback to local display if sheets not available
         @mybooks.list_wish
-        @mybooks.check_for_wishlist_matches
       end
+      # Check for and display matches (works for both sheet and local modes)
+      @mybooks.check_for_wishlist_matches
     end
   end
 

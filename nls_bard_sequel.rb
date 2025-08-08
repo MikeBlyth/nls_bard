@@ -392,7 +392,6 @@ class BookDatabase
     end
     
     # Now display ALL current matches for wishlist items (search fresh every time)
-    puts "Checking for wishlist matches..."
     found_any = false
     
     @wish.where(date_downloaded: nil).each do |wish_item|
@@ -755,11 +754,8 @@ class BookDatabase
     wishlist = build_wishlist_from_sheet_and_database(sheet_items)
     puts "   Updated wishlist: #{wishlist.count} items (#{wishlist.count { |item| item[:read] }} read)"
     
-    # Step 3: Search for matches (update list if match found)
-    puts "3️⃣ Search for matches"
-    find_and_add_matches(wishlist, new_books)
-    match_count = wishlist.count { |item| !item[:matched_title].nil? }
-    puts "   Found #{match_count} matches"
+    # Step 3: Search for matches will be handled by check_for_wishlist_matches later
+    puts "3️⃣ Skip local matching (handled separately)"
     
     # Step 4: Rewrite the list to sheet
     puts "4️⃣ Rewrite the list to sheet"
