@@ -80,8 +80,12 @@ module BardSessionManager
       password_field.send_keys ENV.fetch('NLS_BARD_PASSWORD')
       submit_button.click
 
+      # Wait for redirect away from login page
       wait.until { !@nls_driver.current_url.include?('/login/') }
-
+      
+      # Verify we actually reached an authenticated page, not an error page
+      verify_successful_login
+      
       @logged_in = true
     rescue KeyError => e
       puts "Login failed: Missing environment variable - #{e.message}. Please check your .env file."
@@ -109,6 +113,69 @@ module BardSessionManager
       exit(1)
     rescue StandardError => e
       puts "An unexpected error occurred during login: #{e.message}"
+      exit(1)
+    end
+  end
+
+  def self.verify_successful_login
+    current_url = @nls_driver.current_url
+    page_source = @nls_driver.page_source
+    
+    # Check for common login failure indicators
+    if current_url.include?('error') || current_url.include?('invalid')
+      puts "\n" + "="*60
+      puts "❌ LOGIN FAILED: Invalid credentials"
+      puts "Current URL indicates login error: #{current_url}"
+      puts "Please check your NLS_BARD_USERNAME and NLS_BARD_PASSWORD in .env file"
+      puts "="*60
+      exit(1)
+    end
+    
+    # Check for error messages in the page content
+    if page_source.include?('invalid username') || 
+       page_source.include?('invalid password') ||
+       page_source.include?('login failed') ||
+       page_source.include?('authentication failed') ||
+       page_source.include?('Invalid credentials')
+      puts "\n" + "="*60
+      puts "❌ LOGIN FAILED: Authentication error detected on page"
+      puts "Please verify your NLS_BARD_USERNAME and NLS_BARD_PASSWORD in .env file"
+      puts "="*60
+      exit(1)
+    end
+    
+    # Check that we're on the expected BARD domain and not redirected elsewhere
+    unless current_url.include?('nlsbard.loc.gov')
+      puts "\n" + "="*60
+      puts "❌ LOGIN FAILED: Redirected to unexpected domain"
+      puts "Expected: nlsbard.loc.gov, Got: #{current_url}"
+      puts "This may indicate authentication failure or site changes"
+      puts "="*60
+      exit(1)
+    end
+    
+    # Verify we can access authenticated content by checking for expected elements
+    begin
+      wait = Selenium::WebDriver::Wait.new(timeout: 5)
+      # Look for elements that indicate successful authentication
+      # This is a basic check - we'll expand this based on what the authenticated page contains
+      if page_source.include?('logout') || page_source.include?('sign out') || 
+         current_url.include?('bard2-web') && !current_url.include?('login')
+        puts "✅ Login successful - authenticated session established"
+      else
+        puts "\n" + "="*60
+        puts "❌ LOGIN FAILED: No authentication indicators found"
+        puts "Current URL: #{current_url}"
+        puts "Page may not contain expected authenticated content"
+        puts "Please verify your credentials and try again"
+        puts "="*60
+        exit(1)
+      end
+    rescue Selenium::WebDriver::Error::TimeoutError
+      puts "\n" + "="*60
+      puts "❌ LOGIN FAILED: Timeout waiting for authenticated page elements"
+      puts "This likely indicates invalid credentials"
+      puts "="*60
       exit(1)
     end
   end

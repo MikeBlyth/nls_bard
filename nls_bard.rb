@@ -245,6 +245,28 @@ def iterate_update_pages
 
     # NOTE: process_page and process_entry will need to be adapted for the new site's HTML structure.
     entries = process_page(page_content)
+    
+    # On the first page, verify we got entries (could indicate login failure)
+    if page_number == 1 && entries.empty?
+      # Check if we're actually on a login or error page
+      current_url = BardSessionManager.nls_driver.current_url
+      page_source = BardSessionManager.nls_driver.page_source
+      
+      if current_url.include?('/login/') || page_source.include?('login') || page_source.include?('sign in')
+        puts "\n" + "="*60
+        puts "❌ AUTHENTICATION REQUIRED: Redirected to login page"
+        puts "This indicates your session expired or credentials are invalid"
+        puts "Current URL: #{current_url}"
+        puts "Please verify your NLS_BARD_USERNAME and NLS_BARD_PASSWORD in .env file"
+        puts "="*60
+        exit(1)
+      elsif page_source.include?('no results') || page_source.include?('no books found')
+        puts "⚠️  No books found on first page - this may be normal if no new books are available"
+      else
+        puts "⚠️  No entries found on first page. Current URL: #{current_url}"
+        puts "This could indicate authentication issues or site structure changes"
+      end
+    end
 
     entries.each { |entry| process_book_entry(entry) }
 
