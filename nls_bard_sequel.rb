@@ -105,7 +105,8 @@ class BookDatabase
 
     # For titles, we use a standard ILIKE search. This is stable for phrases.
     if (title_filter = filters[:title] || '') > ''
-      significant_words = title_filter.downcase.split.reject { |word| STOP_WORDS.include?(word) }
+      # Clean punctuation from words before filtering and searching
+      significant_words = title_filter.downcase.split.map { |word| word.gsub(/[^\w]/, '') }.reject { |word| STOP_WORDS.include?(word) || word.empty? }
       significant_words.each { |word| query = query.where(Sequel.ilike(:title, "%#{word}%")) }
     end
     # For authors, we use Levenshtein distance, which is more intuitive for typos.
