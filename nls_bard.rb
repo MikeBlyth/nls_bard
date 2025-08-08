@@ -220,12 +220,12 @@ def iterate_pages(start_letter)
   save_resume_mark('!', 9999) # Mark the A-Z scrape as complete
 end
 
-def iterate_update_pages(days)
+def iterate_update_pages
   BardSessionManager.initialize_nls_bard_chromium
   @processed_keys_this_session = Set.new # Track keys processed in this run to handle duplicates across pages.
 
   # Navigate to the initial "recently added" page.
-  # The `days` parameter is noted as not working for the new site.
+  # Gets whatever the site considers "new" books
   initial_url = 'https://nlsbard.loc.gov/bard2-web/search/results/recently-added/?language=en&format=all&type=book'
   
   with_bard_retry("navigate to recently added page") do
@@ -275,6 +275,37 @@ def process_book_entry(entry)
   # This can happen on the "recently added" pages.
   return if @processed_keys_this_session&.include?(book[:key])
 
+  # Define patterns for non-English languages in categories
+  non_english_patterns = [
+    /Spanish Language/i,
+    /French Language/i,
+    /German Language/i,
+    /Chinese Language/i,
+    /Japanese Language/i,
+    /Russian Language/i,
+    /Arabic Language/i,
+    /Portuguese Language/i,
+    /Italian Language/i,
+    /Korean Language/i,
+    /Vietnamese Language/i,
+    /Hindi Language/i,
+    /Urdu Language/i,
+    /Tagalog Language/i,
+    /Farsi Language/i,
+    /Persian Language/i,
+    /Hebrew Language/i,
+    /Yiddish Language/i,
+    /Latin Language/i,
+    /Greek Language/i,
+    /Multilingual/i
+  ]
+
+  # Check if any non-English language pattern is present in categories
+  if non_english_patterns.any? { |pattern| book[:categories] =~ pattern }
+    puts "Skipping non-English book: #{book[:title]} (#{book[:key]}) - Language detected in categories."
+    return
+  end
+
   # We only want to process and add books that are new to our database.
   # If a book already exists, we skip it to avoid unnecessary processing
   # like fetching ratings or performing database updates. The `insert_book` method
@@ -320,9 +351,9 @@ def read_all
   iterate_pages(letter)
 end
 
-def read_updates(days)
+def read_updates
   @outfile = File.open('output/nls_bard_books_updates.txt', 'a') # append to existing file
-  iterate_update_pages(days)
+  iterate_update_pages
 end
 
 def update_years # Try to find publication year for DB entries which don't have it
@@ -371,14 +402,78 @@ def list_books_by_filter(filter, options)
 end
 
 def update_book_records(key, title)
+  mark_book_as_read(key, "Updated records for book: #{title} (#{key})")
+end
+
+def update_author_read_count(book)
+  # Parse author names and increment their has_read count
+  return if book[:author].nil? || book[:author].strip.empty?
+  
+  require_relative 'name_parse'
+  
+  # Split multiple authors by semicolon
+  author_list = book[:author].split(';').map(&:strip).reject(&:empty?)
+  
+  author_list.each do |author_name|
+    parsed = parse_author_name(author_name)
+    next if parsed[:last].empty?
+    
+    # Increment the author's has_read count using direct database access
+    rows_updated = @mybooks.DB[:authors].where(
+      last_name: parsed[:last],
+      first_name: parsed[:first],
+      middle_name: parsed[:middle]
+    ).update(has_read: Sequel.expr(:has_read) + 1)
+    
+    if rows_updated > 0
+      puts "  Updated read count for author: #{parsed[:first]} #{parsed[:middle]} #{parsed[:last]}"
+    end
+  end
+end
+
+def parse_author_name(name)
+  return {last: '', first: '', middle: ''} if name.nil? || name.strip.empty?
+  
+  name = name.strip
+  
+  # Handle corporate/organizational authors
+  if name.include?('(') || name.include?('Society') || name.include?('Association') || 
+     name.include?('Institute') || name.include?('Organization') || name.include?('Inc.') ||
+     name.include?('Corp.') || name.include?('Company') || name.include?('Press')
+    return {last: name[0..19], first: '', middle: ''}
+  end
+  
+  parsed = name_parse(name)
+  {
+    last: (parsed[:last] || '')[0..19],
+    first: (parsed[:first] || '')[0..19], 
+    middle: (parsed[:middle] || '')[0..19]
+  }
+end
+
+def mark_book_as_read(key, success_message = nil)
+  # Validate the key format case-insensitively.
+  return puts "Invalid key format: '#{key}'. Not a standard book ID." unless key =~ /\A[A-Z]{1,3}[0-9]+\z/i
+
+  key.upcase! # Convert to uppercase for consistency
+
   book = @mybooks.get_book(key)
   if book
     @books.filter(key: book[:key]).update(has_read: true, date_downloaded: Date.today)
-    @mybooks.wish_delete(key: book[:key])
-    puts "Updated records for book: #{title} (#{key})"
+    @mybooks.wish_mark_downloaded(key: book[:key])
+    update_author_read_count(book)
+    
+    # Sync to Google Sheets if enabled - mark as read
+    @mybooks.mark_book_read_in_sheets(book[:title], book[:author])
+    
+    puts success_message || "Marked as downloaded: #{book[:title]} (#{key})"
   else
-    puts "Book with key #{key} not found in the database. Consider adding: #{title}"
+    puts "Book with key #{key} not found in the database."
   end
+end
+
+def mark_as_downloaded(key)
+  mark_book_as_read(key)
 end
 
 def initialize_database
@@ -483,6 +578,9 @@ def handle_command(command_line)
          end
 
   options = Optparse.parse(args) # Parse, label the options
+  
+  # Return early if parsing failed (invalid command)
+  return if options.nil?
 
   # Runtime options
   $verbose = options.verbose
@@ -497,9 +595,30 @@ def handle_command(command_line)
   filters[:key] = options.key.upcase
   puts 'filters loaded' if $debug
 
-  if options.getnew > 0
-    puts "getting books added in past #{options.getnew} days"
-    read_updates(options.getnew)
+  if options.getnew
+    puts "Getting new books from site"
+    read_updates
+    
+    # Get books added today for wishlist checking and Google Sheets sync
+    today_books = @mybooks.books.where(date_added: Date.today).all
+    
+    # Enable Google Sheets sync for post-session processing
+    @mybooks.enable_sheets_sync
+    
+    if @mybooks.sheets_enabled?
+      # Perform full bidirectional sync with Google Sheets
+      @mybooks.sync_after_book_session(options.check_all_wishlist ? nil : today_books)
+    else
+      # Fallback to local-only wishlist matching if sheets not available
+      if options.check_all_wishlist
+        @mybooks.check_for_wishlist_matches
+      else
+        @mybooks.check_for_wishlist_matches(today_books) if today_books.any?
+      end
+    end
+    
+    # Sync interesting books to Google Sheets after scraping (without terminal output)
+    @mybooks.sync_interesting_books_to_sheets
   end
 
   if options.output > ''
@@ -514,12 +633,27 @@ def handle_command(command_line)
   if options.wish
     author = filters[:author]
     if filters[:title] > ''
+      # Enable Google Sheets sync for wishlist operations
+      @mybooks.enable_sheets_sync
 
       # Preserve the full author name as entered
       filters[:author] = author
       @mybooks.insert_wish(filters)
-    else # No auth/title given, so just list
-      @mybooks.list_wish
+    else # No auth/title given, so do full bidirectional sync
+      # Enable Google Sheets sync for bidirectional sync
+      @mybooks.enable_sheets_sync
+      
+      if @mybooks.sheets_enabled?
+        # Do full bidirectional sync: read sheet → add new items → write back
+        @mybooks.sync_after_book_session
+        # Display the wishlist on terminal after sync
+        puts "📋 Displaying wishlist..."
+        @mybooks.list_wish
+      else
+        # Fallback to local display if sheets not available
+        @mybooks.list_wish
+      end
+      # Check for and display matches (works for both sheet and local modes)
       @mybooks.check_for_wishlist_matches
     end
   end
@@ -598,9 +732,12 @@ def handle_command(command_line)
             # Truncate title at 80 characters and colorize light blue
             title = book[:title] || ""
             truncated_title = title.length > 80 ? title[0..76] + "..." : title
-            colored_title = "\033[94m#{truncated_title}\033[0m"  # Light blue color
+            colored_title = "\033[96m#{truncated_title}\033[0m"  # Bright cyan color
             
-            puts "  #{key_field} | #{colored_title} by #{book[:author]} | ⭐ #{book[:stars]} (#{book[:ratings]} ratings)"
+            # Check if I have read books by this author (has_read > 0)
+            author_indicator = @mybooks.has_read_author?(book[:author]) ? "\033[92mA\033[0m " : "  "
+            
+            puts "  #{author_indicator}#{key_field} | #{colored_title} by #{book[:author]} | ⭐ #{book[:stars]} (#{book[:ratings]} ratings)"
           end
         end
         puts ""
@@ -609,6 +746,14 @@ def handle_command(command_line)
       puts "No books found matching the interesting criteria."
       puts "Try lowering the minimum stars or ratings, or check if you have desired categories set."
     end
+    
+    # Sync interesting books to Google Sheets after displaying
+    @mybooks.enable_sheets_sync
+    @mybooks.sync_interesting_books_to_sheets(
+      min_stars: options.min_stars,
+      min_ratings: options.min_ratings,
+      min_year: options.min_year
+    )
   end
 
   if options.backup
@@ -616,9 +761,33 @@ def handle_command(command_line)
     zip_backups
   end
 
+  if options.sync_sheets
+    puts "Syncing wishlist with Google Sheets..."
+    @mybooks.enable_sheets_sync
+    @mybooks.sync_full_wishlist_to_sheets
+  end
+
+  if options.test_add
+    @mybooks.test_add_book(
+      title: options.title,
+      author: options.author, 
+      key: options.key,
+      date_added: options.test_date
+    )
+  end
+
+  if options.test_delete
+    @mybooks.test_delete_book(key: options.key)
+  end
+
   if options.download != []
     puts "Downloading #{options.download}"
     options.download.each { |key| download(key) }
+  end
+
+  if options.mark_downloaded != []
+    puts "Marking as downloaded: #{options.mark_downloaded}"
+    options.mark_downloaded.each { |key| mark_as_downloaded(key) }
   end
 
   update_ratings if options.update_ratings
@@ -679,7 +848,13 @@ loop do
   break if args.empty? || args[0] =~ /(exit)|(end)|(quit)/i
 
   Reline::HISTORY << command_line
-  handle_command(args)
+  
+  begin
+    handle_command(args)
+  rescue => e
+    puts "❌ Error executing command: #{e.message}"
+    puts "Use -h or --help to see available options"
+  end
 end
 
 wrap_up

@@ -16,7 +16,7 @@ services:
       POSTGRES_USER: mike
       POSTGRES_DB: nlsbard
     volumes:
-      - /home/mike/postgres-data:/var/lib/postgresql/data  # Direct path
+      - /home/mike/postgres-data-prod:/var/lib/postgresql/data  # Separate prod database volume
       - ./db_init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on empty database
     restart: unless-stopped
 
@@ -36,6 +36,8 @@ services:
       NLS_BARD_USERNAME: ${NLS_BARD_USERNAME}
       NLS_BARD_PASSWORD: ${NLS_BARD_PASSWORD}
       CONTAINER_DOWNLOAD_PATH: /home/appuser/Downloads
+      # Production environment flag for Google Sheets integration
+      BARD_ENVIRONMENT: production
     volumes:
       # Mount the host's download path into the container for consistency with dev.
       - ${WIN_DOWNLOADS_PATH}:/home/appuser/Downloads

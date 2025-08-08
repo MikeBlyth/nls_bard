@@ -2,10 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(docker-compose:*)",
-      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch google_credentials.json nls-bard-5e76a5305047.json' --prune-empty --tag-name-filter cat master)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git rm:*)"
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(./nls-dev.sh:*)"
     ],
     "deny": []
   }

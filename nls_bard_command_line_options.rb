@@ -12,7 +12,8 @@ class Optparse
     options = OpenStruct.new
     options.summary = []
     options.download = []
-    options.getnew = 0
+    options.mark_downloaded = []
+    options.getnew = false
     options.title = ''
     options.author = ''
     options.blurb = ''
@@ -33,6 +34,11 @@ class Optparse
     options.min_stars = 3.8
     options.min_ratings = 1000
     options.min_year = 0
+    options.sync_sheets = false
+    options.check_all_wishlist = false
+    options.test_add = false
+    options.test_date = nil
+    options.test_delete = false
 
     options.verbose = false
 
@@ -43,8 +49,8 @@ class Optparse
       opts.separator 'Actions:'
 
       # Update with the latest books
-      opts.on('-g', '--getnew N', Integer, 'Update DB with books added in past N days') do |n|
-        options.getnew = n
+      opts.on('-g', '--getnew', 'Update DB with new books from site') do
+        options.getnew = true
       end
 
       # Find
@@ -92,9 +98,37 @@ class Optparse
         options.wish_remove = title
       end
 
+      # Check all books for wishlist matches (instead of just new books)
+      opts.on('--all', 'Check entire book catalog for wishlist matches (not just new books)') do
+        options.check_all_wishlist = true
+      end
+
       # Download books
       opts.on('-d', '--download x,y,z', Array, 'Download books by key') do |list|
         options.download = list
+      end
+
+      # Mark books as downloaded without actually downloading
+      opts.on('-X', '--mark-downloaded x,y,z', Array, 'Mark books as downloaded without actually downloading') do |list|
+        options.mark_downloaded = list
+      end
+
+      # Google Sheets sync
+      opts.on('--sync-sheets', 'Sync wishlist with Google Sheets') do |p|
+        options.sync_sheets = true
+      end
+
+      # Test book insertion
+      opts.on('--test_add', 'Add test book to database (use with -t, -a, -k, --test-date)') do
+        options.test_add = true
+      end
+
+      opts.on('--test-date DATE', 'Date for test book (YYYY-MM-DD format)') do |date|
+        options.test_date = date
+      end
+
+      opts.on('--testdelete', 'Delete test book from database (use with -k)') do
+        options.test_delete = true
       end
 
       # Debug
@@ -184,7 +218,17 @@ class Optparse
       end
     end
 
-    opt_parser.parse!(args)
+    begin
+      opt_parser.parse!(args)
+    rescue OptionParser::InvalidOption => e
+      puts "❌ Unknown option: #{e.message}"
+      puts "Use -h or --help to see available options"
+      return nil
+    rescue => e
+      puts "❌ Error parsing command: #{e.message}"
+      return nil
+    end
+    
     options
   end # parse()
 end # class OptparseExample

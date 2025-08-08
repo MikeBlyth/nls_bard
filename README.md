@@ -4,9 +4,12 @@ The purpose of this app is to make it more convenient to find and download audio
 
 *   Downloads entries from the NLS database into a local PostgreSQL database
 *   Gets Goodreads ratings for each book where they exist and adds that to the database
-*   Keeps a wishlist and checks it against books that exist in the database
+*   **Maintains a smart wishlist with bidirectional Google Sheets synchronization**
+*   **Efficiently matches wishlist items against newly added books only**  
+*   **Tracks downloaded books with date stamps instead of removing from wishlist**
 *   Provides tools for searching with fuzzy matching support
 *   Facilitates downloading titles
+*   Tracks author reading statistics with automatic count updates
 *   Includes robust network error handling with automatic retry mechanisms
 
 This project runs inside Docker to create a stable, consistent environment and avoid issues with local changes to Ruby, Chrome, or system dependencies.
@@ -70,29 +73,28 @@ This method downloads pre-built Docker images for faster setup:
 
 5.  **Set Up Database:**
     ```bash
-    # Start database service
+    # Start database service (if not already running)
     docker-compose up -d db
     
-    # Wait a few seconds for database to initialize
-    sleep 10
-    
-    # Test the setup
-    ./nls-dev.sh -h
+    # Ensure the development database is populated with initial data
+    # This script will automatically restore from a known backup if the DB is empty.
+    ./populate_dev_db.sh
     ```
-
-6.  **Restore Database from Backup (if you have one):**
+    
+6.  **Restore Database from Backup (Manual):**
     ```bash
-    # If you have a database backup file in db_dump/ folder:
-    ./restore_database.sh db_dump/nls_bard_backup_YYYYMMDD_HHMMSS.sql
+    # If you need to manually restore a specific backup to the development database:
+    ./restore_database.sh --dev db_dump/dev/dev-nls_bard_dev_backup_YYYYMMDD_HHMMSS.sql
     
-    # Or start with fresh database (will be populated on first scrape)
+    # To restore a production backup to the production database:
+    ./restore_database.sh --prod db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
     ```
-
+    
 7.  **Verify Installation:**
     ```bash
     # Test basic functionality
     ./nls-dev.sh -w                    # Should show empty wishlist or existing items
-    ./nls-dev.sh -f -t "test"          # Should search database (may be empty initially)
+    ./nls-dev.sh -f -t "test"          # Should search database (now populated)
     ```
 
 ### Method 2: Build from Source (Advanced Users)
@@ -118,7 +120,7 @@ If moving from an existing installation to a new system:
 
 1.  **On Old System - Create Backup:**
     ```bash
-    ./backup_database.sh
+    ./backup_database.sh --prod
     # This creates: db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
     ```
 
@@ -128,12 +130,12 @@ If moving from an existing installation to a new system:
 
 3.  **On New System - Follow Method 1 above, then:**
     ```bash
-    # Restore your data
-    ./restore_database.sh db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
+    # Restore your data to the production environment
+    ./restore_database.sh --prod db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
     
     # Verify restoration
-    ./nls-dev.sh -w                    # Check wishlist
-    ./nls-dev.sh -f -t "some title"    # Search for known book
+    ./nls-prod.sh -w                    # Check wishlist
+    ./nls-prod.sh -f -t "some title"    # Search for known book
     ```
 
 ### Initial Database Population
@@ -156,11 +158,19 @@ The project provides several convenience scripts for different environments:
 - **`./nls-prod.sh [command]`** - Production environment (self-contained image)
 - **`./rebuild-prod.sh`** - Rebuild production image after code changes
 
-### Development vs Production Environments
+### Database Environments
 
-- **Development**: Use `./nls-dev.sh` for testing and development. Code changes are immediately available.
-- **Production**: Use `./nls-prod.sh` for stable operations. Requires `./rebuild-prod.sh` after code changes.
-- The scripts automatically prevent running both environments simultaneously.
+The application uses three separate database environments to prevent corruption and enable safe development:
+
+- **Production Environment** (`./nls-prod.sh`): Stable data for actual use. Database stored on host at `/home/mike/postgres-data-prod`
+- **Development Environment** (`./nls-dev.sh`): Testing and development data. Uses Docker named volume `nls-bard_postgres_data_dev`
+- **VS Code Dev Container**: Debugging and IDE integration. Uses Docker named volume `nls-bard-dev-container_postgres_data_dev`
+
+**Key Benefits:**
+- **No Corruption Risk**: Each environment has its own PostgreSQL instance and data storage
+- **Safe Environment Switching**: Can run different environments simultaneously without conflicts
+- **Debugging Support**: VS Code container database can be populated with subset of data for efficient debugging
+- **Data Isolation**: Production data is completely protected from development activities
 
 ### Running Commands
 
@@ -177,6 +187,12 @@ The project provides several convenience scripts for different environments:
 
 # Interactive shell for development
 ./nls-dev.sh                             # Opens bash shell in container
+
+# Running a specific script in a container (e.g., for database population/updates)
+# For development:
+docker-compose run --rm --entrypoint="" app ruby populate_authors_table.rb
+# For production:
+docker-compose -f docker-compose.prod.yml run --rm --entrypoint="" app ruby populate_authors_table.rb
 ```
 
 ## Book Updates
@@ -199,22 +215,67 @@ This ensures no books are processed without their complete metadata and prevents
 
 ## Commands
 
-Update the database of titles: `-g 30`
+### Core Database Operations
 
-- This was intended to get the past <n> days, but it seems NLS just gives 30 days regardless of the number, so the update needs to run at least once a month or it will miss some titles.
+**Update the database of titles**: `-g 30`
+- This was intended to get the past <n> days, but it seems NLS just gives 30 days regardless of the number, so the update needs to run at least once a month or it will miss some titles
+- **NEW**: Automatically performs bidirectional Google Sheets sync after database updates
+- **NEW**: Efficient wishlist matching only checks newly added books by default (use `--all` to check entire catalog)
 
-Add a title to wish list: `-w -t "Tom Sawyer" -a Twain`
+**Find a title**: `-f -t "Tom Sawyer" -a Twain [-v]`
+- Can use title and/or author for searching
+- `-v` option gives long (verbose) output including download history
+- Supports fuzzy matching for better search results
 
-Check whether any wish list titles are found: `-w`
+**Download a title**: `-d DB1234567`
+- Downloads are saved to the directory specified in your `.env` file (`WIN_DOWNLOADS_PATH` variable)
+- Automatically marks book as downloaded with date stamp
+- Updates wishlist and Google Sheets if sync is enabled
+- Increments author's read count in the authors table
 
-Remove an item from the wishlist: `--wish_remove "partial title"`
+**Mark a title as downloaded** (without actually downloading): `-X DB1234567` or `--mark-downloaded DB1234567`
+- Use when you downloaded a book from another system but want to update your records
+- Same effects as actual download: marks as read, updates wishlist, syncs to sheets
 
-Find a title, can use title and/or author: `-f -t "Tom Sawyer" -a Twain [-v]`
-- -v option gives long (verbose) output including whether and when the title was previously downloaded
-- 
-Download a title: `-d DB1234567`
+### Wishlist Management
 
-Downloads are saved to the directory specified in your `.env` file (`WIN_DOWNLOADS_PATH` variable), typically your Windows Downloads folder when using WSL.
+**Add a title to wishlist**: `-w -t "Tom Sawyer" -a Twain`
+- **NEW**: If book exists in database, immediately adds to wishlist with database key
+- **NEW**: Automatically syncs to Google Sheets if enabled
+- Shows whether book is already available or previously downloaded
+
+**Check wishlist matches**: `-w`
+- Lists current wishlist and shows any matches found in the database
+- **NEW**: Displays color-coded indicators for authors you've read before
+- **NEW**: Shows download dates for books you've already read
+
+**Remove item from wishlist**: `--wish_remove "partial title"`
+- Can search by partial title or database key (e.g., DB123456)
+- Interactive confirmation before removal
+- Only shows non-downloaded items for removal
+
+### Google Sheets Integration
+
+**Full bidirectional sync**: `--sync-sheets`
+- Imports new items from Google Sheets to local wishlist
+- Exports complete local wishlist to Google Sheets with match details
+- Maintains 6-column format: Title, Author, Matched Title, Matched Author, Key, Read
+
+**Efficient wishlist checking**: 
+- Default behavior: Only check newly added books for wishlist matches (faster)
+- Use `--all` flag with `-g` to check entire catalog (slower but comprehensive)
+
+### Development and Testing
+
+**Add test book**: `--test_add -t "Title" -a "Author" -k DB123456 [-d YYYY-MM-DD]`
+- Adds a test book to database for development/testing
+- Optional date parameter (defaults to today)
+- Useful for testing wishlist matching and sync functionality
+
+**Delete test book**: `--testdelete -k DB123456`
+- Removes a test book from database
+- Cleans up associated wishlist entries and category associations
+- Use for cleaning up after testing
 
 ### Other Actions
 
@@ -236,8 +297,10 @@ Usage: nls_bard.rb [actions]
 
     -d, --download x,y,z		Download books by key
 
+    -X, --mark-downloaded x,y,z	Mark books as downloaded without actually downloading
+
     --[no-]debug			Debug (debug gem must be required in nls_bard.rb and 
-    				debugger statement(s) included as breakpoings)
+    					debugger statement(s) included as breakpoings)
 
     -u, --update			Update ratings
 
@@ -270,7 +333,9 @@ The project includes several shell scripts for different operations:
 - **`./nls-prod.sh`** - Production environment wrapper  
 - **`./rebuild-prod.sh`** - Rebuild production Docker image
 - **`./backup_database.sh`** - Create comprehensive database backup
+- **`./backup_dev_db.sh`** - Backup development database from WSL command line
 - **`./restore_database.sh <file>`** - Restore database from backup
+- **`./populate_vscode_db.sh`** - Populate VS Code Dev Container database
 
 ### Common Operations
 
@@ -284,15 +349,48 @@ The project includes several shell scripts for different operations:
 ```
 
 **Database Operations:**
+
+The application maintains three separate database environments to prevent corruption and enable safe development:
+
+1. **Production Database** - Stable data for actual use
+2. **Development Database** - Testing and development data  
+3. **VS Code Dev Container Database** - Debugging and IDE integration
+
 ```bash
-# Create backup
+# === BACKUP OPERATIONS ===
+
+# Backup production database
+./backup_database.sh --prod
+# Creates: db_dump/nls_bard_complete_backup_YYYYMMDD_HHMMSS.sql
+
+# Backup development database  
+./backup_dev_db.sh
+# Creates: db_dump/dev/dev-nls_bard_dev_backup_YYYYMMDD_HHMMSS.sql
+
+# Legacy backup (detects environment automatically)
 ./backup_database.sh
 
-# Restore from backup  
-./restore_database.sh db_dump/nls_bard_backup_20250804_192120.sql
+# === RESTORE OPERATIONS ===
 
-# Interactive database access
+# Restore to production database
+./restore_database.sh --prod db_dump/nls_bard_complete_backup_20250804_192120.sql
+
+# Restore to development database
+./restore_database.sh --dev db_dump/dev/dev-nls_bard_dev_backup_20250806_141052.sql
+
+# Populate VS Code Dev Container database (run from WSL, not inside VS Code)
+./populate_vscode_db.sh
+
+# === INTERACTIVE ACCESS ===
+
+# Production database
+docker-compose -f docker-compose.prod.yml exec db psql -U mike -d nlsbard
+
+# Development database  
 docker-compose exec db psql -U mike -d nlsbard
+
+# VS Code Dev Container database
+docker exec -i nls-bard-dev-container-db-1 psql -U mike -d nlsbard
 ```
 
 **Running Interactive Shell:**
@@ -300,6 +398,39 @@ docker-compose exec db psql -U mike -d nlsbard
 ./nls-dev.sh                    # Development shell
 ./nls-prod.sh /bin/bash         # Production shell (after build)
 ```
+
+## Google Sheets Integration (Optional)
+
+The application includes **bidirectional Google Sheets sync** for advanced wishlist management. This allows you to manage your wishlist through Google Sheets while maintaining automatic synchronization with the local database.
+
+### Features
+
+- **Import**: New items added to Google Sheets are automatically imported to local wishlist
+- **Matching**: Local database is searched for matches to wishlist items  
+- **Export**: Complete wishlist with match details is exported back to Google Sheets
+- **Automatic Sync**: Runs during `-g` database updates for seamless operation
+- **Master Interface**: Google Sheets becomes your primary wishlist management interface
+
+### Setup
+
+The project includes pre-configured Google Sheets integration:
+
+- **Service Account**: `bookwishlist@nls-bard.iam.gserviceaccount.com`
+- **Credentials**: Located in `google_credentials.json`
+- **Sheet ID**: `1lzbFyKVTwjFfAAZLP5f-fyWmsCt38PdmejtfuZMo8aw`
+- **Format**: 6-column layout (Title, Author, Matched Title, Matched Author, Key, Read)
+
+### Workflow
+
+1. **Add Books**: Add desired books to Google Sheets (Title and Author columns only)
+2. **Daily Update**: Run `./nls-dev.sh -g 30` to update database and sync
+3. **Automatic Processing**: 
+   - App imports new items from sheet to local wishlist
+   - Searches database for matches to wishlist items
+   - Exports complete wishlist with match details back to sheet
+4. **Results**: Matched books show database details; downloaded books marked with ✓
+
+This creates a seamless workflow where Google Sheets serves as your wishlist interface while the app handles all the technical synchronization and matching.
 
 # Revisions for new BARD (BARD2)
 
@@ -311,7 +442,7 @@ The URL for a given item like DB128900 is https://nlsbard.loc.gov/bard2-web/sear
 
 Go the URL for that page and click on the link like
 
-`<a href="/bard2-web/download/DB128900/?filename=DB-Baldacci_David%2520Strangers%2520in%2520time%253A%2520a%2520World%2520War%2520II%2520novel%2520DB128900&amp;prevPage=Strangers%20in%20time%3A%20a%20World%20War%20II%20novel%20DB128900&amp;from=%2Fsearch%2FDB128900%2F" role="link"><span>Download <span>Strangers in time: a World War II novel</span></span></a>`
+`<a href="/bard2-web/download/DB128900/?filename=DB-Baldacci_David%2520Strangers%2520in%2520time%253A%2520a%2520World%2520War%2520II%2520novel%2520DB128900&amp;prevPage=Strangers%2520in%2520time%253A%2520a%2520World%2520War%2520II%2520novel%2520DB128900&amp;from=%2Fsearch%2FDB128900%2F" role="link"><span>Download <span>Strangers in time: a World War II novel</span></span></a>`
 
 ## Get newly added books: iterate_update_pages
 Entry URL = https://nlsbard.loc.gov/bard2-web/login/

@@ -7,8 +7,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: nlsbard
     volumes:
-      - /home/mike/postgres-data:/var/lib/postgresql/data  # Direct path
-      - ./db_dump:/db_dump
+      - postgres_data_dev:/var/lib/postgresql/data  # Use a named volume for the dev database
+      - db_dump_dev:/db_dump # Use a named volume for dev database dumps
       - ./db_init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on empty database
     restart: unless-stopped
   app:
@@ -29,8 +29,11 @@ services:
       POSTGRES_USER: mike
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       CONTAINER_DOWNLOAD_PATH: /home/chrome/Downloads
+      # Development environment flag for Google Sheets integration
+      BARD_ENVIRONMENT: development
     volumes:
       - .:/app
+      - db_dump_dev:/app/db_dump # Map dev dumps to a separate directory
       - ${WIN_DOWNLOADS_PATH}:/home/chrome/Downloads  # Updated this line
     ports:
       - "3000:3000"
@@ -40,4 +43,6 @@ services:
     # Ensure stdin is kept open for interactive `docker-compose run` commands.
     stdin_open: true
 
-
+volumes:
+  postgres_data_dev:
+  db_dump_dev:
