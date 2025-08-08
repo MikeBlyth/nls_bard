@@ -18,6 +18,9 @@ cd "$SCRIPT_DIR"
 echo "Rebuilding production application image with latest code changes..."
 echo "This may take a few minutes..."
 
+# Use this if getting missing-layer errors
+# docker builder prune -f
+
 # Rebuild the production app image
 docker-compose -f docker-compose.prod.yml build app
 
