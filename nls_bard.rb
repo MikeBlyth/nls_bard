@@ -649,6 +649,8 @@ def handle_command(command_line)
         # Display the wishlist on terminal after sync
         puts "📋 Displaying wishlist..."
         @mybooks.list_wish
+        # Display formatted matches
+        @mybooks.check_for_wishlist_matches
       else
         # Fallback to local display if sheets not available
         @mybooks.list_wish

@@ -172,7 +172,7 @@ class BookDatabase
       puts 'Error - both title and author are required for wish list'
       return
     end
-    b = get_by_hash({ title:, author: }).first # See if a matching book is already in the database
+    b = get_by_hash_fuzzy({ title:, author: }).first # See if a matching book is already in the database
     if b # match
       read = if b[:has_read]
                'and has already been read'
@@ -391,21 +391,31 @@ class BookDatabase
       end
     end
     
-    # Now display ALL wishlist items that have matches (regardless of when they were found)
+    # Now display ALL current matches for wishlist items (search fresh every time)
+    puts "Checking for wishlist matches..."
     found_any = false
-    @wish.where(date_downloaded: nil).exclude(key: nil).each do |wish_item|
-      book = @books.where(key: wish_item[:key]).first
-      if book
+    
+    @wish.where(date_downloaded: nil).each do |wish_item|
+      # Search for matches using fuzzy search
+      matched_books = get_by_hash_fuzzy({
+        title: wish_item[:title],
+        author: wish_item[:author]
+      })
+      
+      if matched_books.any?
         unless found_any
           puts 'Found matches to wishlist:'
           found_any = true
         end
         
+        # Show the first/best match
+        match = matched_books.first
+        
         # Check if this is a newly found match
-        is_new = specific_books && specific_books.any? { |b| b[:key] == book[:key] }
+        is_new = specific_books && specific_books.any? { |b| b[:key] == match[:key] }
         new_indicator = is_new ? ' \033[33m[NEW]\033[0m' : ''
         
-        puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{book[:title]}\033[0m\" by #{book[:author]} (#{book[:key]})#{new_indicator}"
+        puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{match[:title]}\033[0m\" by #{match[:author]} (#{match[:key]})#{new_indicator}"
       end
     end
     
@@ -845,11 +855,11 @@ class BookDatabase
     wishlist.each do |wish_item|
       next if wish_item[:read] # Skip read items
       
-      # Find matching books
-      matched_books = get_by_hash({
+      # Find matching books using fuzzy search for better matching
+      matched_books = get_by_hash_fuzzy({
         title: wish_item[:title],
         author: wish_item[:author]
-      }).all
+      })
       
       # Take the first match if found
       if matched_books.any?
@@ -858,8 +868,7 @@ class BookDatabase
         wish_item[:matched_author] = match[:author]
         wish_item[:book_key] = match[:key]
         
-        # Display the match
-        puts "   📚 Match found: '#{wish_item[:title]}' → '#{match[:title]}' (#{match[:key]})"
+        # Match found - details will be shown in formatted display later
       end
     end
   end
