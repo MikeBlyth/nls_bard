@@ -1,5 +1,5 @@
 # Use the same base image as the development Dockerfile for consistency.
-FROM ruby:3.3.1-slim
+FROM ruby:3.4.5-slim
 
 # Install essential Linux packages, Chrome, and ChromeDriver in a single layer.
 # This mirrors the development setup for maximum stability and compatibility.

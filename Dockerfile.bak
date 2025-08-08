@@ -1,4 +1,4 @@
-FROM ruby:3.3.1-slim
+FROM ruby:3.4.5-slim
 
 # Install essential Linux packages and retry on failure
 RUN apt-get update -qq && \

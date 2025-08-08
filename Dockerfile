@@ -1,4 +1,4 @@
-FROM ruby:3.3.1-slim
+FROM ruby:3.4.5-slim
 
 # Define the frozen Chrome version. This is the single source of truth for a stable environment.
 ARG CHROME_VERSION="126.0.6478.126"
