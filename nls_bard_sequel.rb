@@ -742,32 +742,81 @@ class BookDatabase
       return false
     end
 
-    puts "📊 Simple 4-step wishlist sync..."
+    puts "📊 Optimized 3-step wishlist preparation..."
     
     # Step 1: Read the sheet
     puts "1️⃣ Read the sheet"
     sheet_items = @wishlist_manager.get_sheet_wishlist
     puts "   Read #{sheet_items.count} items from Google Sheet"
     
-    # Step 2: Update the list including date read
-    puts "2️⃣ Update the list including date read"
+    # Step 2: Merge sheet info with database wishlist
+    puts "2️⃣ Merge sheet info with database wishlist"
     wishlist = build_wishlist_from_sheet_and_database(sheet_items)
     puts "   Updated wishlist: #{wishlist.count} items (#{wishlist.count { |item| item[:read] }} read)"
     
-    # Step 3: Search for matches (update list with match data for sheets)
-    puts "3️⃣ Search for matches"
+    # Step 3: Store for later matching (return wishlist for display)
+    puts "3️⃣ Prepared wishlist for display and matching"
+    
+    # Store wishlist for later matching step
+    @prepared_wishlist = wishlist
+    @prepared_new_books = new_books
+    
+    puts "✅ Sync preparation completed"
+    true
+  end
+  
+  # New method to handle the matching and final sheet update
+  def complete_wishlist_sync_with_matching
+    return false unless sheets_enabled? && @prepared_wishlist
+    
+    wishlist = @prepared_wishlist
+    new_books = @prepared_new_books
+    
+    puts "\n🔍 Completing wishlist sync with matching..."
+    
+    # Step 4: Search for matches and insert new keys
+    puts "4️⃣ Search for matches and update database"
     find_and_add_matches(wishlist, new_books)
     match_count = wishlist.count { |item| !item[:matched_title].nil? }
     puts "   Found #{match_count} matches"
     
-    # Step 4: Rewrite the list to sheet
-    puts "4️⃣ Rewrite the list to sheet"
+    # Display the matches found
+    display_wishlist_matches(wishlist, new_books)
+    
+    # Step 5: Update sheet with match details
+    puts "5️⃣ Update Google Sheet with match details"
     @wishlist_manager.sync_to_sheet(wishlist.reject { |item| item[:read] })
     unread_count = wishlist.count { |item| !item[:read] }
-    puts "   Wrote #{unread_count} unread items to sheet"
+    puts "   ✅ Updated sheet with #{unread_count} unread items and match details"
     
-    puts "✅ Sync completed"
+    # Clean up
+    @prepared_wishlist = nil
+    @prepared_new_books = nil
+    
     true
+  end
+  
+  # Display matches in the same format as check_for_wishlist_matches
+  def display_wishlist_matches(wishlist, new_books = nil)
+    found_any = false
+    
+    wishlist.each do |item|
+      # Skip items without matches
+      next unless item[:matched_title] && !item[:matched_title].empty?
+      
+      unless found_any
+        puts 'Found matches to wishlist:'
+        found_any = true
+      end
+      
+      # Check if this is a newly found match
+      is_new = new_books && new_books.any? { |b| b[:key] == item[:book_key] }
+      new_indicator = is_new ? ' \033[33m[NEW]\033[0m' : ''
+      
+      puts "\t'\033[36m#{item[:title]}\033[0m' matched: \"\033[32m#{item[:matched_title]}\033[0m\" by #{item[:matched_author]} (#{item[:book_key]})#{new_indicator}"
+    end
+    
+    puts 'No matches found for wishlist items.' unless found_any
   end
 
   def get_wishlist_matches

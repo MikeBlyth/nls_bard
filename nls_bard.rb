@@ -628,8 +628,10 @@ def handle_command(command_line)
     @mybooks.enable_sheets_sync
     
     if @mybooks.sheets_enabled?
-      # Perform full bidirectional sync with Google Sheets
+      # Optimized flow: prepare sync, then complete after displaying any results
       @mybooks.sync_after_book_session(options.check_all_wishlist ? nil : today_books)
+      # Complete the matching and sheet update (this will display matches)
+      @mybooks.complete_wishlist_sync_with_matching
     else
       # Fallback to local-only wishlist matching if sheets not available
       if options.check_all_wishlist
@@ -666,17 +668,19 @@ def handle_command(command_line)
       @mybooks.enable_sheets_sync
       
       if @mybooks.sheets_enabled?
-        # Do full bidirectional sync: read sheet → add new items → write back
+        # Step 1-3: Read sheet, merge info, prepare for display
         @mybooks.sync_after_book_session
-        # Display the wishlist on terminal after sync
-        puts "📋 Displaying wishlist..."
+        # Step 4: Display the updated wishlist (without matches yet)
+        puts "📋 Displaying updated wishlist..."
         @mybooks.list_wish
+        # Step 5-6: Search for matches and update sheet
+        @mybooks.complete_wishlist_sync_with_matching
       else
         # Fallback to local display if sheets not available
         @mybooks.list_wish
+        # Check for and display matches (works for local mode only)
+        @mybooks.check_for_wishlist_matches
       end
-      # Check for and display matches (works for both sheet and local modes)
-      @mybooks.check_for_wishlist_matches
     end
   end
 
@@ -862,12 +866,12 @@ end
 # Enter the interactive command loop (REPL)
 loop do
   puts
-  puts "Enter command or 'quit'"
+  puts "Enter command or 'quit' (or 'q')"
   command_line = Reline.readline('> ', true)
   break if command_line.nil? # Handle Ctrl-D for EOF
 
   args = command_line.shellsplit
-  break if args.empty? || args[0] =~ /(exit)|(end)|(quit)/i
+  break if args.empty? || args[0] =~ /(exit)|(end)|(quit)|(q)/i
 
   Reline::HISTORY << command_line
   
