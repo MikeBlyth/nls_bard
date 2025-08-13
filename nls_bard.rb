@@ -643,6 +643,10 @@ def handle_command(command_line)
     
     # Sync interesting books to Google Sheets after scraping (without terminal output)
     @mybooks.sync_interesting_books_to_sheets
+    
+    # Automatic backup after get-new-books operation for data safety
+    puts "\n📦 Creating automatic backup after get-new-books operation..."
+    @mybooks.dump_database
   end
 
   if options.output > ''

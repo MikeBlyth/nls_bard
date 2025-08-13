@@ -16,7 +16,8 @@ services:
       POSTGRES_USER: mike
       POSTGRES_DB: nlsbard
     volumes:
-      - /home/mike/postgres-data-prod:/var/lib/postgresql/data  # Separate prod database volume
+      - postgres_data_prod:/var/lib/postgresql/data  # Named volume for reliability
+      - /mnt/c/Users/mike/bard/db_dump:/db_dump  # Windows-accessible backup location
       - ./db_init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on empty database
     restart: unless-stopped
 
@@ -41,4 +42,8 @@ services:
     volumes:
       # Mount the host's download path into the container for consistency with dev.
       - ${WIN_DOWNLOADS_PATH}:/home/appuser/Downloads
+      - ./db_dump:/app/db_dump  # Local backup directory
     restart: unless-stopped
+
+volumes:
+  postgres_data_prod:
