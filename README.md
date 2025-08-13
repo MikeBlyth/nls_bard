@@ -144,7 +144,7 @@ If starting with an empty database:
 
 ```bash
 # Get recent books (this may take 30+ minutes)
-./nls-dev.sh -g 30
+./nls-dev.sh -g
 
 # Or for complete A-Z scrape (this may take several hours)
 ./nls-dev.sh --scrape_all_letters
@@ -162,7 +162,7 @@ The project provides several convenience scripts for different environments:
 
 The application uses three separate database environments to prevent corruption and enable safe development:
 
-- **Production Environment** (`./nls-prod.sh`): Stable data for actual use. Database stored on host at `/home/mike/postgres-data-prod`
+- **Production Environment** (`./nls-prod.sh`): Stable data for actual use. Uses Docker named volume `postgres_data_prod` for reliable persistence
 - **Development Environment** (`./nls-dev.sh`): Testing and development data. Uses Docker named volume `nls-bard_postgres_data_dev`
 - **VS Code Dev Container**: Debugging and IDE integration. Uses Docker named volume `nls-bard-dev-container_postgres_data_dev`
 
@@ -217,10 +217,12 @@ This ensures no books are processed without their complete metadata and prevents
 
 ### Core Database Operations
 
-**Update the database of titles**: `-g 30`
-- This was intended to get the past <n> days, but it seems NLS just gives 30 days regardless of the number, so the update needs to run at least once a month or it will miss some titles
+**Update the database of titles**: `-g`
+- Gets new books from the NLS BARD website (typically recent additions)
+- Should be run regularly (weekly or monthly) to keep the catalog current
 - **NEW**: Automatically performs bidirectional Google Sheets sync after database updates
 - **NEW**: Efficient wishlist matching only checks newly added books by default (use `--all` to check entire catalog)
+- **NEW**: Creates automatic backup after successful completion for data safety
 
 **Find a title**: `-f -t "Tom Sawyer" -a Twain [-v]`
 - Can use title and/or author for searching
@@ -306,7 +308,7 @@ Usage: nls_bard.rb [actions]
 
     -m, --manual_update		Get user input for non-matches
    
-    --backup			Backup database to zip file
+    --backup			Backup database to SQL file
 
 	exit				Exits program after executing command on the command line
 					(doesn't exit if a download was performed).
