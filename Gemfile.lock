@@ -91,11 +91,6 @@ GEM
     language_server-protocol (3.17.0.5)
     lint_roller (1.1.0)
     logger (1.7.0)
-    mail (2.8.1)
-      mini_mime (>= 0.1.1)
-      net-imap
-      net-pop
-      net-smtp
     mini_mime (1.1.5)
     minitest (5.25.5)
     multi_json (1.17.0)
@@ -105,15 +100,6 @@ GEM
     nameable (1.1.4)
     net-http (0.6.0)
       uri
-    net-imap (0.5.9)
-      date
-      net-protocol
-    net-pop (0.1.2)
-      net-protocol
-    net-protocol (0.2.2)
-      timeout
-    net-smtp (0.5.1)
-      net-protocol
     nokogiri (1.18.8-x64-mingw-ucrt)
       racc (~> 1.4)
     nokogiri (1.18.8-x86_64-linux-gnu)
@@ -151,19 +137,19 @@ GEM
       uber (< 0.2.0)
     retriable (3.1.2)
     rexml (3.4.1)
-    rspec (3.13.0)
+    rspec (3.13.1)
       rspec-core (~> 3.13.0)
       rspec-expectations (~> 3.13.0)
       rspec-mocks (~> 3.13.0)
-    rspec-core (3.13.3)
+    rspec-core (3.13.5)
       rspec-support (~> 3.13.0)
-    rspec-expectations (3.13.4)
+    rspec-expectations (3.13.5)
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
-    rspec-mocks (3.13.4)
+    rspec-mocks (3.13.5)
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
-    rspec-support (3.13.3)
+    rspec-support (3.13.4)
     rubocop (1.75.6)
       json (~> 2.3)
       language_server-protocol (~> 3.17.0.2)
@@ -201,7 +187,6 @@ GEM
       multi_json (~> 1.10)
     stringio (3.1.7)
     thor (1.4.0)
-    timeout (0.4.3)
     trailblazer-option (0.1.2)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
@@ -231,7 +216,6 @@ DEPENDENCIES
   io-console
   irb
   logger
-  mail
   nameable
   nokogiri
   optparse
