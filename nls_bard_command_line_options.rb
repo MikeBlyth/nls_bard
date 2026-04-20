@@ -20,6 +20,8 @@ class Optparse
     options.find = false
     options.marked = false
     options.fuzzy = false
+    options.full = false
+    options.full_query = ''
     options.output = ''
     options.mark = []
     options.unmark = []
@@ -61,6 +63,12 @@ class Optparse
       # Fuzzy find
       opts.on('--fuzzy', 'Use fuzzy matching for find (finds misspellings)') do |_f|
         options.fuzzy = true
+      end
+
+      # Full-text search
+      opts.on('--full QUERY', 'Full-text search (supports quoted phrases, OR, -)') do |query|
+        options.full = true
+        options.full_query = query
       end
 
       # Summary

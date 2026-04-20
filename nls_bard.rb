@@ -390,22 +390,23 @@ def update_years # Try to find publication year for DB entries which don't have 
 end
 
 def list_books_by_filter(filter, options)
-  if filter[:title] + filter[:author] + filter[:blurb] + filter[:key] == ''
+  if options.full
+    puts 'Performing full-text search...'
+    books = @mybooks.get_by_full_text(options.full_query)
+  elsif filter[:title] + filter[:author] + filter[:blurb] + filter[:key] == ''
     puts 'No title, author, key, or blurb specified'
     return
+  else
+    books = if (filter[:key] || '') > ''
+              book = @mybooks.get_book(filter[:key])
+              book ? [book] : []
+            elsif options.fuzzy
+              puts 'Performing fuzzy search...'
+              @mybooks.get_by_hash_fuzzy(filter)
+            else
+              @mybooks.get_by_hash(filter)
+            end
   end
-
-  books = if (filter[:key] || '') > ''
-            # If a specific key is provided, perform a direct lookup.
-            book = @mybooks.get_book(filter[:key])
-            book ? [book] : [] # Wrap single result in array, or empty array if not found
-          elsif options.fuzzy
-            # Otherwise, perform a fuzzy or standard search.
-            puts 'Performing fuzzy search...'
-            @mybooks.get_by_hash_fuzzy(filter)
-          else
-            @mybooks.get_by_hash(filter)
-          end
 
   #	books.each {|book| puts "#{book[:key]} | #{book[:author]}, #{book[:title]}"}
   if books && books.any?
@@ -656,7 +657,7 @@ def handle_command(command_line)
     #		pp $stdout, @original_stdout, ($stdout == @original_stdout), ($stdout === @original_stdout)
   end
 
-  list_books_by_filter(filters, options) if options.find && filters.count > 0
+  list_books_by_filter(filters, options) if (options.find && filters.count > 0) || options.full
 
   if options.wish
     author = filters[:author]

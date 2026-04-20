@@ -973,6 +973,24 @@ class BookDatabase
     end.sort_by { |item| item[:title].downcase }
   end
 
+  def get_by_full_text(query_string)
+    return @books.where(Sequel.lit('false')) if query_string.strip.empty?
+
+    @books
+      .where(
+        Sequel.lit("document_v2 @@ websearch_to_tsquery('english', ?)", query_string) |
+        Sequel.lit('title % ?', query_string)
+      )
+      .select_append(
+        Sequel.lit("ts_rank(document_v2, websearch_to_tsquery('english', ?)) AS fts_score", query_string),
+        Sequel.lit('similarity(title, ?) AS trigram_score', query_string)
+      )
+      .order(Sequel.lit(
+        "(ts_rank(document_v2, websearch_to_tsquery('english', ?)) * 0.7 + similarity(title, ?) * 0.3) DESC",
+        query_string, query_string
+      ))
+  end
+
   private
 
   def setup_database_indexes
@@ -1026,14 +1044,14 @@ class BookDatabase
   def setup_performance_indexes
     # Only create indexes if the books table actually exists
     return unless table_exists?(:books)
-    
+
     indexes = [
       'CREATE INDEX IF NOT EXISTS books_title_lower_trgm_idx ON books USING gin (lower(title) gin_trgm_ops);',
       'CREATE INDEX IF NOT EXISTS books_author_lower_trgm_idx ON books USING gin (lower(author) gin_trgm_ops);',
       'CREATE INDEX IF NOT EXISTS books_read_by_lower_trgm_idx ON books USING gin (lower(read_by) gin_trgm_ops);',
       'CREATE INDEX IF NOT EXISTS books_last_name_trgm_idx ON books USING gin (lower(get_last_name(author)) gin_trgm_ops);'
     ]
-    
+
     indexes.each do |index_sql|
       begin
         @DB.run(index_sql)
@@ -1042,8 +1060,28 @@ class BookDatabase
         # Continue with other indexes
       end
     end
+
+    setup_fts_column
     
     puts 'Performance indexes configured.'
+  end
+
+  def setup_fts_column
+    begin
+      @DB.run('ALTER TABLE books DROP COLUMN IF EXISTS document;')
+      @DB.run(<<~SQL)
+        ALTER TABLE books ADD COLUMN IF NOT EXISTS document_v2 tsvector
+          GENERATED ALWAYS AS (
+            setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(author, '')), 'B') ||
+            setweight(to_tsvector('english', coalesce(blurb, '')), 'C') ||
+            setweight(to_tsvector('english', coalesce(categories, '')), 'D')
+          ) STORED;
+      SQL
+      @DB.run('CREATE INDEX IF NOT EXISTS books_document_v2_gin_idx ON books USING gin (document_v2);')
+    rescue Sequel::DatabaseError => e
+      puts "FTS column setup warning: #{e.message}"
+    end
   end
 
   def table_exists?(table_name)
