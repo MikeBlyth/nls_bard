@@ -7,7 +7,8 @@ RUN apt-get update -qq && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir sentence-transformers psycopg2-binary flask
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir sentence-transformers psycopg2-binary flask
 
 # Install essential Linux packages, Chrome, and ChromeDriver in a single layer.
 # This mirrors the development setup for maximum stability and compatibility.

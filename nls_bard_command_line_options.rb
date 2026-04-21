@@ -45,6 +45,7 @@ class Optparse
 
     options.verbose = false
     options.limit = 25
+    options.language = 'English'
 
     opt_parser = OptionParser.new do |opts|
       opts.banner = 'Usage: nls_bard.rb [options]'
@@ -73,8 +74,12 @@ class Optparse
         options.full_query = query
       end
 
-      opts.on('--sort-by-relevance', 'Sort --full results by relevance instead of star rating') do
+      opts.on('-r', '--sort-by-relevance', 'Sort --full results by relevance instead of star rating') do
         options.sort_by_relevance = true
+      end
+
+      opts.on('-l', '--language LANG', 'Filter by language (default: English, use "all" for all languages)') do |lang|
+        options.language = lang.downcase == 'all' ? nil : lang
       end
 
       # Summary

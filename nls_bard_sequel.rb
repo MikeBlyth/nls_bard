@@ -94,15 +94,16 @@ class BookDatabase
   end
 
   def get_by_hash(filters) # This one uses case-insensitive filter and only certain fields
-    @books.filter(Sequel.ilike(:title, "%#{filters[:title] || ''}%") &
-                  Sequel.ilike(:author, "%#{filters[:author] || ''}%") &
-                  Sequel.ilike(:blurb, "%#{filters[:blurb] || ''}%"))
-          .order(Sequel.desc(Sequel.function(:coalesce, :stars, 0)))
+    q = @books.filter(Sequel.ilike(:title, "%#{filters[:title] || ''}%") &
+                      Sequel.ilike(:author, "%#{filters[:author] || ''}%") &
+                      Sequel.ilike(:blurb, "%#{filters[:blurb] || ''}%"))
+    q = q.where(language: filters[:language]) if filters[:language]
+    q.order(Sequel.desc(Sequel.function(:coalesce, :stars, 0)))
   end
 
 
   def get_by_hash_fuzzy(filters, threshold: 0.3)
-    query = @books.dup
+    query = filters[:language] ? @books.where(language: filters[:language]) : @books.dup
 
     # For titles, we use a standard ILIKE search. This is stable for phrases.
     if (title_filter = filters[:title] || '') > ''
@@ -960,7 +961,7 @@ class BookDatabase
     end.sort_by { |item| item[:title].downcase }
   end
 
-  def get_by_full_text(query_string, limit: 25, sort_by_relevance: false)
+  def get_by_full_text(query_string, limit: 25, sort_by_relevance: false, language: 'English')
     return @books.where(Sequel.lit('false')) if query_string.strip.empty?
 
     emb = query_embedding(query_string)
@@ -968,12 +969,13 @@ class BookDatabase
 
     emb_lit = "[#{emb.join(',')}]"
     @DB.run("SET hnsw.ef_search = #{[[limit * 2, 100].max, 1000].min}")
-    order = sort_by_relevance ? Sequel.lit('(embedding <=> ?::vector)', emb_lit) : Sequel.desc(Sequel.function(:coalesce, :stars, 0))
-    @books
+    base = language ? @books.where(language: language) : @books
+    inner = base
       .where(Sequel.lit('embedding IS NOT NULL'))
       .select_append(Sequel.lit('1 - (embedding <=> ?::vector) AS vector_score', emb_lit))
-      .order(order)
+      .order(Sequel.lit('(embedding <=> ?::vector)', emb_lit))
       .limit(limit)
+    sort_by_relevance ? inner : inner.from_self.order(Sequel.desc(Sequel.function(:coalesce, :stars, 0)))
   end
 
   def query_embedding(text)

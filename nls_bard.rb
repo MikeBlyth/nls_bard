@@ -393,11 +393,12 @@ def list_books_by_filter(filter, options)
   if options.full
     puts 'Performing full-text search...'
     puts 'Note: --full results capped at 500.' if options.limit > 500
-    books = @mybooks.get_by_full_text(options.full_query, limit: [options.limit, 500].min, sort_by_relevance: options.sort_by_relevance)
+    books = @mybooks.get_by_full_text(options.full_query, limit: [options.limit, 500].min, sort_by_relevance: options.sort_by_relevance, language: options.language)
   elsif filter[:title] + filter[:author] + filter[:blurb] + filter[:key] == ''
     puts 'No title, author, key, or blurb specified'
     return
   else
+    filter[:language] = options.language
     books = if (filter[:key] || '') > ''
               book = @mybooks.get_book(filter[:key])
               book ? [book] : []
