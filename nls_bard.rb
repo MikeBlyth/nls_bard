@@ -392,7 +392,8 @@ end
 def list_books_by_filter(filter, options)
   if options.full
     puts 'Performing full-text search...'
-    books = @mybooks.get_by_full_text(options.full_query)
+    puts 'Note: --full results capped at 500.' if options.limit > 500
+    books = @mybooks.get_by_full_text(options.full_query, limit: [options.limit, 500].min, sort_by_relevance: options.sort_by_relevance)
   elsif filter[:title] + filter[:author] + filter[:blurb] + filter[:key] == ''
     puts 'No title, author, key, or blurb specified'
     return
@@ -402,23 +403,28 @@ def list_books_by_filter(filter, options)
               book ? [book] : []
             elsif options.fuzzy
               puts 'Performing fuzzy search...'
-              @mybooks.get_by_hash_fuzzy(filter)
+              @mybooks.get_by_hash_fuzzy(filter).limit(options.limit)
             else
-              @mybooks.get_by_hash(filter)
+              @mybooks.get_by_hash(filter).limit(options.limit)
             end
   end
 
-  #	books.each {|book| puts "#{book[:key]} | #{book[:author]}, #{book[:title]}"}
-  if books && books.any?
+  all_books = books ? books.to_a : []
+  if all_books.any?
     if $verbose
-      books.each do |book_hash|
-        book = Book.new(book_hash) # {screen_output}"
-        book.display(screen_output) # Book needs to know how to format, for screen or a file
+      all_books.each do |book_hash|
+        book = Book.new(book_hash)
+        book.display(screen_output)
         puts ''
       end
     else
-      books.each { |book| puts "#{book[:key]} | #{book[:author]}. #{book[:title]}" }
+      all_books.each do |book|
+        score = book[:vector_score] ? format(' [%.3f]', book[:vector_score]) : ''
+        stars = book[:stars] ? format(' (%.1f ⭐)', book[:stars]) : ''
+        puts "#{book[:key]}#{score}#{stars} | #{book[:author]}. #{book[:title]}"
+      end
     end
+    puts "\n#{all_books.count} match#{all_books.count == 1 ? '' : 'es'} found"
   else
     puts '*** NO MATCHING BOOKS FOUND ***'
   end

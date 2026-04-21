@@ -6,7 +6,7 @@ RUN apt-get update -qq && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir sentence-transformers psycopg2-binary
+RUN pip install --no-cache-dir sentence-transformers psycopg2-binary flask
 
 # Define the frozen Chrome version. This is the single source of truth for a stable environment.
 ARG CHROME_VERSION="126.0.6478.126"

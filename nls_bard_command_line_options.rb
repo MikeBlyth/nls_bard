@@ -22,6 +22,7 @@ class Optparse
     options.fuzzy = false
     options.full = false
     options.full_query = ''
+    options.sort_by_relevance = false
     options.output = ''
     options.mark = []
     options.unmark = []
@@ -43,6 +44,7 @@ class Optparse
     options.test_delete = false
 
     options.verbose = false
+    options.limit = 25
 
     opt_parser = OptionParser.new do |opts|
       opts.banner = 'Usage: nls_bard.rb [options]'
@@ -69,6 +71,10 @@ class Optparse
       opts.on('--full QUERY', 'Full-text search (supports quoted phrases, OR, -)') do |query|
         options.full = true
         options.full_query = query
+      end
+
+      opts.on('--sort-by-relevance', 'Sort --full results by relevance instead of star rating') do
+        options.sort_by_relevance = true
       end
 
       # Summary
@@ -216,6 +222,10 @@ class Optparse
 
       opts.on('-v', '--[no-]verbose', 'Long descriptions') do |v|
         options.verbose = v
+      end
+
+      opts.on('-n', '--limit N', Integer, 'Maximum number of results (default: 25)') do |n|
+        options.limit = n
       end
 
       # No argument, shows at tail.  This will print an options summary.

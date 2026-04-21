@@ -96,7 +96,8 @@ class BookDatabase
   def get_by_hash(filters) # This one uses case-insensitive filter and only certain fields
     @books.filter(Sequel.ilike(:title, "%#{filters[:title] || ''}%") &
                   Sequel.ilike(:author, "%#{filters[:author] || ''}%") &
-          Sequel.ilike(:blurb, "%#{filters[:blurb] || ''}%"))
+                  Sequel.ilike(:blurb, "%#{filters[:blurb] || ''}%"))
+          .order(Sequel.desc(Sequel.function(:coalesce, :stars, 0)))
   end
 
 
@@ -131,9 +132,9 @@ class BookDatabase
                                            Sequel.function(:lower, last_name_from_input))
     end
 
-    return query.order(Sequel.desc(order_expressions.reduce(:+))) if order_expressions.any?
+    return query.order(Sequel.desc(order_expressions.reduce(:+)), Sequel.desc(Sequel.function(:coalesce, :stars, 0))) if order_expressions.any?
 
-    query # Return the unordered query if no valid filters were provided.
+    query.order(Sequel.desc(Sequel.function(:coalesce, :stars, 0)))
   end
 
   def select_books(filter_hash) # This won't do case-insensitive searches
@@ -341,85 +342,71 @@ class BookDatabase
     end
   end
 
-    def check_for_wishlist_matches(specific_books = nil)
+  def check_for_wishlist_matches(specific_books = nil)
     if specific_books && specific_books.any?
       puts "Checking for wishlist matches in #{specific_books.count} newly added books..."
+      match_against_specific_books(specific_books)
     else
       puts 'Checking for wishlist matches...'
+      bulk_match_unmatched_wishlist_items
     end
-    
-    # First, search for new matches in the specified subset (if provided)
-    new_matches_found = false
-    if specific_books
-      @wish.where(date_downloaded: nil, key: nil).each do |wish_item|
-        # Search only within specific books for new matches
-        matching_book = specific_books.find do |book|
-          # Skip if any field is nil
-          next if book[:title].nil? || book[:author].nil? || wish_item[:title].nil? || wish_item[:author].nil?
-          
-          # Use simple fuzzy matching logic
-          book_title_words = book[:title].downcase.split
-          wish_title_words = wish_item[:title].downcase.split
-          book_author_words = book[:author].downcase.split
-          wish_author_words = wish_item[:author].downcase.split
-          
-          # Skip if any field is empty after splitting
-          next if book_title_words.empty? || wish_title_words.empty? || book_author_words.empty? || wish_author_words.empty?
-          
-          title_match = book_title_words.first.include?(wish_title_words.first) ||
-                       wish_title_words.first.include?(book_title_words.first)
-          author_match = book_author_words.last.include?(wish_author_words.last) ||
-                        wish_author_words.last.include?(book_author_words.last)
-          title_match && author_match
-        end
-        
-        if matching_book
-          # Store the key so we don't have to search again
-          @wish.where(id: wish_item[:id]).update(key: matching_book[:key])
-          new_matches_found = true
-        end
+    display_wishlist_matches(specific_books)
+  end
+
+  def match_against_specific_books(specific_books)
+    @wish.where(date_downloaded: nil, key: nil).each do |wish_item|
+      next if wish_item[:title].nil? || wish_item[:author].nil?
+      matching_book = specific_books.find do |book|
+        next if book[:title].nil? || book[:author].nil?
+        book_title_words = book[:title].downcase.split
+        wish_title_words = wish_item[:title].downcase.split
+        next if book_title_words.empty? || wish_title_words.empty?
+        title_match = book_title_words.first.include?(wish_title_words.first) ||
+                      wish_title_words.first.include?(book_title_words.first)
+        author_match = book[:author].downcase.split.last.to_s.include?(wish_item[:author].downcase.split.last.to_s) ||
+                       wish_item[:author].downcase.split.last.to_s.include?(book[:author].downcase.split.last.to_s)
+        title_match && author_match
+      end
+      @wish.where(id: wish_item[:id]).update(key: matching_book[:key]) if matching_book
+    end
+  end
+
+  def bulk_match_unmatched_wishlist_items
+    results = @DB.fetch(<<~SQL).all
+      SELECT DISTINCT ON (w.id)
+        w.id,
+        b.key AS book_key
+      FROM wishlist w
+      JOIN books b ON
+        b.document_v2 @@ plainto_tsquery('english', w.title)
+        AND levenshtein(lower(get_last_name(b.author)), lower(get_last_name(w.author))) <= 2
+      WHERE w.date_downloaded IS NULL AND w.key IS NULL AND length(trim(w.title)) > 2
+      ORDER BY w.id, similarity(lower(b.title), lower(w.title)) DESC
+    SQL
+    results.each { |r| @wish.where(id: r[:id]).update(key: r[:book_key]) }
+    puts "  #{results.count} new wishlist matches found." if results.any?
+  end
+
+  def display_wishlist_matches(specific_books = nil)
+    matched_items = @DB.fetch(<<~SQL).all
+      SELECT w.title AS wish_title, w.author AS wish_author,
+             b.title AS book_title, b.author AS book_author, b.key AS book_key
+      FROM wishlist w
+      JOIN books b ON b.key = w.key
+      WHERE w.date_downloaded IS NULL
+      ORDER BY w.title
+    SQL
+
+    if matched_items.any?
+      puts 'Found matches to wishlist:'
+      matched_items.each do |item|
+        is_new = specific_books && specific_books.any? { |b| b[:key] == item[:book_key] }
+        new_indicator = is_new ? " \033[33m[NEW]\033[0m" : ''
+        puts "\t'\033[36m#{item[:wish_title]}\033[0m' matched: \"\033[32m#{item[:book_title]}\033[0m\" by #{item[:book_author]} (#{item[:book_key]})#{new_indicator}"
       end
     else
-      # Search entire database for items without keys
-      @wish.where(date_downloaded: nil, key: nil).each do |wish_item|
-        matching_books = get_by_hash_fuzzy({ title: wish_item[:title], author: wish_item[:author] }).limit(1)
-        
-        if matching_books.any?
-          book = matching_books.first
-          @wish.where(id: wish_item[:id]).update(key: book[:key])
-          new_matches_found = true
-        end
-      end
+      puts 'No matches found for wishlist items.'
     end
-    
-    # Now display ALL current matches for wishlist items (search fresh every time)
-    found_any = false
-    
-    @wish.where(date_downloaded: nil).each do |wish_item|
-      # Search for matches using fuzzy search
-      matched_books = get_by_hash_fuzzy({
-        title: wish_item[:title],
-        author: wish_item[:author]
-      })
-      
-      if matched_books.any?
-        unless found_any
-          puts 'Found matches to wishlist:'
-          found_any = true
-        end
-        
-        # Show the first/best match
-        match = matched_books.first
-        
-        # Check if this is a newly found match
-        is_new = specific_books && specific_books.any? { |b| b[:key] == match[:key] }
-        new_indicator = is_new ? ' \033[33m[NEW]\033[0m' : ''
-        
-        puts "\t'\033[36m#{wish_item[:title]}\033[0m' matched: \"\033[32m#{match[:title]}\033[0m\" by #{match[:author]} (#{match[:key]})#{new_indicator}"
-      end
-    end
-    
-    puts 'No matches found for wishlist items.' unless found_any
   end
 
   
@@ -973,48 +960,53 @@ class BookDatabase
     end.sort_by { |item| item[:title].downcase }
   end
 
-  def get_by_full_text(query_string)
+  def get_by_full_text(query_string, limit: 25, sort_by_relevance: false)
     return @books.where(Sequel.lit('false')) if query_string.strip.empty?
 
     emb = query_embedding(query_string)
-    emb_lit = "[#{emb.join(',')}]" if emb
+    return @books.where(Sequel.lit('false')) unless emb
 
-    base = @books.where(
-      Sequel.lit("document_v2 @@ websearch_to_tsquery('english', ?)", query_string) |
-      Sequel.lit('title % ?', query_string)
-    )
-
-    if emb_lit
-      base
-        .select_append(
-          Sequel.lit("ts_rank(document_v2, websearch_to_tsquery('english', ?)) AS fts_score", query_string),
-          Sequel.lit('similarity(title, ?) AS trigram_score', query_string),
-          Sequel.lit("CASE WHEN embedding IS NOT NULL THEN 1 - (embedding <=> ?::vector) ELSE 0 END AS vector_score", emb_lit)
-        )
-        .order(Sequel.lit(
-          "(ts_rank(document_v2, websearch_to_tsquery('english', ?)) * 0.4 + similarity(title, ?) * 0.2 + CASE WHEN embedding IS NOT NULL THEN 1 - (embedding <=> ?::vector) ELSE 0 END * 0.4) DESC",
-          query_string, query_string, emb_lit
-        ))
-    else
-      base
-        .select_append(
-          Sequel.lit("ts_rank(document_v2, websearch_to_tsquery('english', ?)) AS fts_score", query_string),
-          Sequel.lit('similarity(title, ?) AS trigram_score', query_string)
-        )
-        .order(Sequel.lit(
-          "(ts_rank(document_v2, websearch_to_tsquery('english', ?)) * 0.7 + similarity(title, ?) * 0.3) DESC",
-          query_string, query_string
-        ))
-    end
+    emb_lit = "[#{emb.join(',')}]"
+    @DB.run("SET hnsw.ef_search = #{[[limit * 2, 100].max, 1000].min}")
+    order = sort_by_relevance ? Sequel.lit('(embedding <=> ?::vector)', emb_lit) : Sequel.desc(Sequel.function(:coalesce, :stars, 0))
+    @books
+      .where(Sequel.lit('embedding IS NOT NULL'))
+      .select_append(Sequel.lit('1 - (embedding <=> ?::vector) AS vector_score', emb_lit))
+      .order(order)
+      .limit(limit)
   end
 
   def query_embedding(text)
+    require 'net/http'
     require 'json'
-    require 'shellwords'
-    result = `python3 /app/embeddings.py --query #{Shellwords.escape(text)} 2>/dev/null`
-    JSON.parse(result.strip) unless result.strip.empty?
+    ensure_embedding_server
+    uri = URI('http://127.0.0.1:5001/embed')
+    response = Net::HTTP.post(uri, { text: text }.to_json, 'Content-Type' => 'application/json')
+    JSON.parse(response.body)['embedding']
   rescue StandardError
     nil
+  end
+
+  def ensure_embedding_server
+    return if @embedding_server_started
+    begin
+      Net::HTTP.get(URI('http://127.0.0.1:5001/health'))
+      @embedding_server_started = true
+      return
+    rescue
+    end
+    puts 'Starting embedding server (first search will take ~10s)...'
+    Process.spawn('python3 /app/embedding_server.py', out: '/dev/null', err: '/dev/null')
+    30.times do
+      begin
+        Net::HTTP.get(URI('http://127.0.0.1:5001/health'))
+        @embedding_server_started = true
+        return
+      rescue
+        sleep 1
+      end
+    end
+    raise 'Embedding server failed to start'
   end
 
   private
