@@ -1,7 +1,7 @@
 name: 'nls-bard' # Explicitly name the project to avoid conflicts
 services:
   db:
-    image: postgres:13
+    image: pgvector/pgvector:pg13
     environment:
       POSTGRES_USER: mike
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -31,10 +31,12 @@ services:
       CONTAINER_DOWNLOAD_PATH: /home/chrome/Downloads
       # Development environment flag for Google Sheets integration
       BARD_ENVIRONMENT: development
+      HF_HOME: /opt/huggingface_cache
     volumes:
       - .:/app
       - db_dump_dev:/app/db_dump # Map dev dumps to a separate directory
       - ${WIN_DOWNLOADS_PATH}:/home/chrome/Downloads  # Updated this line
+      - huggingface_cache:/opt/huggingface_cache
     ports:
       - "3000:3000"
     # Keep the container running for development.
@@ -46,3 +48,4 @@ services:
 volumes:
   postgres_data_dev:
   db_dump_dev:
+  huggingface_cache:

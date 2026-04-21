@@ -976,19 +976,45 @@ class BookDatabase
   def get_by_full_text(query_string)
     return @books.where(Sequel.lit('false')) if query_string.strip.empty?
 
-    @books
-      .where(
-        Sequel.lit("document_v2 @@ websearch_to_tsquery('english', ?)", query_string) |
-        Sequel.lit('title % ?', query_string)
-      )
-      .select_append(
-        Sequel.lit("ts_rank(document_v2, websearch_to_tsquery('english', ?)) AS fts_score", query_string),
-        Sequel.lit('similarity(title, ?) AS trigram_score', query_string)
-      )
-      .order(Sequel.lit(
-        "(ts_rank(document_v2, websearch_to_tsquery('english', ?)) * 0.7 + similarity(title, ?) * 0.3) DESC",
-        query_string, query_string
-      ))
+    emb = query_embedding(query_string)
+    emb_lit = "[#{emb.join(',')}]" if emb
+
+    base = @books.where(
+      Sequel.lit("document_v2 @@ websearch_to_tsquery('english', ?)", query_string) |
+      Sequel.lit('title % ?', query_string)
+    )
+
+    if emb_lit
+      base
+        .select_append(
+          Sequel.lit("ts_rank(document_v2, websearch_to_tsquery('english', ?)) AS fts_score", query_string),
+          Sequel.lit('similarity(title, ?) AS trigram_score', query_string),
+          Sequel.lit("CASE WHEN embedding IS NOT NULL THEN 1 - (embedding <=> ?::vector) ELSE 0 END AS vector_score", emb_lit)
+        )
+        .order(Sequel.lit(
+          "(ts_rank(document_v2, websearch_to_tsquery('english', ?)) * 0.4 + similarity(title, ?) * 0.2 + CASE WHEN embedding IS NOT NULL THEN 1 - (embedding <=> ?::vector) ELSE 0 END * 0.4) DESC",
+          query_string, query_string, emb_lit
+        ))
+    else
+      base
+        .select_append(
+          Sequel.lit("ts_rank(document_v2, websearch_to_tsquery('english', ?)) AS fts_score", query_string),
+          Sequel.lit('similarity(title, ?) AS trigram_score', query_string)
+        )
+        .order(Sequel.lit(
+          "(ts_rank(document_v2, websearch_to_tsquery('english', ?)) * 0.7 + similarity(title, ?) * 0.3) DESC",
+          query_string, query_string
+        ))
+    end
+  end
+
+  def query_embedding(text)
+    require 'json'
+    require 'shellwords'
+    result = `python3 /app/embeddings.py --query #{Shellwords.escape(text)} 2>/dev/null`
+    JSON.parse(result.strip) unless result.strip.empty?
+  rescue StandardError
+    nil
   end
 
   private
@@ -1015,6 +1041,7 @@ class BookDatabase
     begin
       @DB.run('CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;')
       @DB.run('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;')
+      @DB.run('CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;')
     rescue Sequel::DatabaseError => e
       if e.message.include?('already exists with same argument types')
         puts 'Extensions already exist (from init scripts or restore), continuing...'
@@ -1079,6 +1106,11 @@ class BookDatabase
           ) STORED;
       SQL
       @DB.run('CREATE INDEX IF NOT EXISTS books_document_v2_gin_idx ON books USING gin (document_v2);')
+      # Drop and recreate if dimension changed (768 → 384)
+      col = @DB.fetch("SELECT atttypmod FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid WHERE c.relname = 'books' AND a.attname = 'embedding' AND NOT a.attisdropped").first
+      @DB.run('ALTER TABLE books DROP COLUMN embedding;') if col && col[:atttypmod] != 384
+      @DB.run('ALTER TABLE books ADD COLUMN IF NOT EXISTS embedding vector(384);')
+      @DB.run('CREATE INDEX IF NOT EXISTS books_embedding_idx ON books USING hnsw (embedding vector_cosine_ops);')
     rescue Sequel::DatabaseError => e
       puts "FTS column setup warning: #{e.message}"
     end

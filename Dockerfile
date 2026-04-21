@@ -1,5 +1,13 @@
 FROM ruby:3.3.1-slim
 
+# Install Python and embedding dependencies early so this layer is cached independently of Chrome
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends python3 python3-pip python3-venv && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir sentence-transformers psycopg2-binary
+
 # Define the frozen Chrome version. This is the single source of truth for a stable environment.
 ARG CHROME_VERSION="126.0.6478.126"
 # Add UID/GID arguments. These are passed from docker-compose.yml to ensure
@@ -45,9 +53,6 @@ RUN apt-get update -qq && \
     mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
     chmod +x /usr/local/bin/chromedriver && \
     rm -rf /tmp/chromedriver* && \
-    # Install Node.js 20.x
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
     # Clean up apt caches to reduce image size
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -55,12 +60,12 @@ RUN apt-get update -qq && \
 # Set environment variables for the new user. This ensures gems are installed
 # in the user's home directory, avoiding permission issues inside the dev container.
 ENV GEM_HOME="/home/chrome/.gems"
-ENV PATH="/home/chrome/.gems/bin:/home/chrome/.npm-global/bin:$PATH"
+ENV PATH="/home/chrome/.gems/bin:$PATH"
 
 # Create necessary directories and set ownership before switching user.
 # The user 'chrome' now exists, so this will succeed.
-RUN mkdir -p /app/db_dump /app/output /home/chrome/.cache/selenium ${GEM_HOME} /home/chrome/.npm-global && \
-    chown -R chrome:chrome /app /home/chrome
+RUN mkdir -p /app/db_dump /app/output /home/chrome/.cache/selenium ${GEM_HOME} /opt/huggingface_cache && \
+    chown -R chrome:chrome /app /home/chrome /opt/huggingface_cache
 
 # Switch to the non-root user for all subsequent commands
 USER chrome
@@ -79,10 +84,6 @@ RUN gem install bundler && \
 
 COPY --chown=chrome:chrome . .
 
-RUN gem update rexml && gem cleanup rexml && \
-    # Install Claude CLI with proper npm prefix for user
-    npm config set prefix ~/.npm-global && \
-    npm install -g @anthropic-ai/claude-code
 
 # The user's shell is already set to /bin/bash during creation.
 # The .bashrc setup is still useful for interactive sessions.
@@ -91,6 +92,6 @@ RUN \
     echo 'HISTSIZE=1000' >> /home/chrome/.bashrc && \
     echo 'HISTFILESIZE=2000' >> /home/chrome/.bashrc && \
     echo 'PROMPT_COMMAND="history -a"' >> /home/chrome/.bashrc && \
-    echo 'export PATH="/home/chrome/.gems/bin:/home/chrome/.npm-global/bin:$PATH"' >> /home/chrome/.bashrc
+    echo 'export PATH="/home/chrome/.gems/bin:/opt/venv/bin:$PATH"' >> /home/chrome/.bashrc
     
 CMD ["ruby", "nls_bard.rb", "-h"]

@@ -648,6 +648,9 @@ def handle_command(command_line)
     # Automatic backup after get-new-books operation for data safety
     puts "\n📦 Creating automatic backup after get-new-books operation..."
     @mybooks.dump_database
+
+    puts "\n🧠 Generating embeddings for new English books..."
+    system('python3 /app/embeddings.py')
   end
 
   if options.output > ''
