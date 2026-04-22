@@ -2,7 +2,9 @@
   <!-- Header -->
   <div class="flex items-start justify-between gap-4 mb-5">
     <div class="min-w-0">
-      <h2 class="text-xl font-bold text-slate-100 leading-snug"><%= h(@book[:title]) %></h2>
+      <h2 class="text-xl font-bold text-slate-100 leading-snug">
+        <% if award_book?(@book) %><span class="text-red-400">★</span> <% end %><%= h(@book[:title]) %>
+      </h2>
       <p class="text-slate-400 mt-1"><%= h(@book[:author]) %></p>
     </div>
     <button @click="modalOpen = false"
@@ -26,6 +28,9 @@
           <span class="text-slate-500 font-normal">(<%= @book[:ratings].to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse %>)</span>
         <% end %>
       </span>
+    <% end %>
+    <% if (rt = format_reading_time(@book[:reading_time])) %>
+      <span class="bg-slate-700 rounded-lg px-3 py-1 text-sm text-slate-300"><%= rt %></span>
     <% end %>
     <% if @book[:language] && @book[:language] != 'English' %>
       <span class="bg-indigo-900 text-indigo-300 rounded-lg px-3 py-1 text-sm"><%= h(@book[:language]) %></span>

@@ -1,0 +1,18 @@
+<% if @cats&.any? %>
+  <div class="flex flex-wrap gap-1.5 py-3">
+    <% if @category %>
+      <button hx-post="/search" hx-target="#results" hx-include="#search-form"
+              hx-vals='{"category":""}'
+              class="bg-indigo-600 text-white text-xs rounded-full px-3 py-1 font-medium">
+        ✕ Clear filter
+      </button>
+    <% end %>
+    <% @cats.each do |cat| %>
+      <button hx-post="/search" hx-target="#results" hx-include="#search-form"
+              hx-vals='{"category":"<%= h(cat) %>"}'
+              class="<%= cat == @category ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600' %> text-xs rounded-full px-3 py-1 transition">
+        <%= h(cat.split.map(&:capitalize).join(' ')) %>
+      </button>
+    <% end %>
+  </div>
+<% end %>

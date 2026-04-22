@@ -1,3 +1,10 @@
+<%# OOB: update category filter with cats from this result set %>
+<% result_cats = @books.flat_map { |b| b[:categories] || [] }.uniq.sort %>
+<div id="cat-filter" hx-swap-oob="true">
+  <% @cats = result_cats %>
+  <%= erb :cat_filter, layout: false %>
+</div>
+
 <% if @books.empty? %>
   <p class="text-slate-500 text-center py-12">No books found.</p>
 <% else %>
@@ -27,7 +34,7 @@
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
             <h3 class="font-semibold text-slate-100 group-hover:text-indigo-300 transition leading-snug">
-              <%= h(book[:title]) %>
+              <% if award_book?(book) %><span class="text-red-400">★</span> <% end %><%= h(book[:title]) %>
             </h3>
             <p class="text-slate-400 text-sm mt-0.5"><%= h(book[:author]) %></p>
           </div>
@@ -49,6 +56,10 @@
               <span>·</span>
               <span><%= book[:ratings].to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse %> ratings</span>
             <% end %>
+            <% if (rt = format_reading_time(book[:reading_time])) %>
+              <span>·</span>
+              <span><%= rt %></span>
+            <% end %>
           </div>
           <% if book[:categories]&.any? %>
             <div class="flex flex-wrap gap-1 justify-end">
@@ -68,10 +79,15 @@
       <div class="flex items-center gap-3 py-1.5 px-1 hover:bg-slate-800 rounded cursor-pointer group text-sm"
            @click="modalKey = '<%= h(book[:key]) %>'; modalOpen = true">
         <span class="font-mono text-slate-600 text-xs w-20 shrink-0"><%= h(book[:key]) %></span>
-        <span class="text-slate-100 group-hover:text-indigo-300 transition truncate min-w-0 flex-1 font-medium"><%= h(book[:title]) %></span>
+        <span class="text-slate-100 group-hover:text-indigo-300 transition truncate min-w-0 flex-1 font-medium">
+          <% if award_book?(book) %><span class="text-red-400">★</span> <% end %><%= h(book[:title]) %>
+        </span>
         <span class="text-slate-500 truncate w-56 shrink-0 hidden sm:block">
           <%= h(book[:author]) %><% if book[:year] && book[:year] > 0 %> · <%= book[:year] %><% end %>
         </span>
+        <% if (rt = format_reading_time(book[:reading_time])) %>
+          <span class="text-slate-600 shrink-0 w-16 text-right text-xs"><%= rt %></span>
+        <% end %>
         <span class="<%= star_color(book[:stars]) %> shrink-0 w-16 text-right"><%= book[:stars] ? format('%.1f ⭐', book[:stars]) : '—' %></span>
       </div>
     <% end %>

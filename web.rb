@@ -25,13 +25,14 @@ end
 # --- Search ---
 
 post '/search' do
-  query  = params[:query].to_s.strip
-  author = params[:author].to_s.strip
-  mode   = params[:mode] || 'find'
-  lang   = params[:language] == 'all' ? nil : (params[:language].presence || 'English')
-  limit  = (params[:limit] || '25').to_i.clamp(1, 500)
+  query    = params[:query].to_s.strip
+  author   = params[:author].to_s.strip
+  mode     = params[:mode] || 'find'
+  lang     = params[:language] == 'all' ? nil : (params[:language].presence || 'English')
+  limit    = (params[:limit] || '25').to_i.clamp(1, 500)
   sort_relevance = params[:sort] == 'relevance'
-  media  = params[:media_type] == 'all' ? nil : (params[:media_type].presence || 'DB')
+  media    = params[:media_type] == 'all' ? nil : (params[:media_type].presence || 'DB')
+  @category = params[:category].to_s.strip.presence
 
   @books = if query.empty? && author.empty?
              []
@@ -56,9 +57,19 @@ post '/search' do
                         .group_by { |r| r[:book] }
                         .transform_values { |rows| rows.map { |r| r[:category] }.uniq }
     @books = @books.map { |b| b.merge(categories: cats_by_key[b[:key]] || []) }
+    if @category
+      cat_keys = DB_WEB.DB[:cat_book].where(category: @category).select_map(:book).to_set
+      @books = @books.select { |b| cat_keys.include?(b[:key]) }
+    end
   end
 
   erb :search_results, layout: false
+end
+
+get '/categories' do
+  @category = nil
+  @cats = DB_WEB.DB[:cats].order(:category).select_map(:category)
+  erb :cat_filter, layout: false
 end
 
 # --- Book detail (modal content) ---
@@ -167,6 +178,17 @@ helpers do
 
   def catalog_count
     @catalog_count ||= DB_WEB.books.count
+  end
+
+  def format_reading_time(hours)
+    return nil if hours.nil? || hours.to_f == 0
+    h = hours.to_i
+    m = ((hours.to_f - h) * 60).round
+    m > 0 ? "#{h}h #{m}m" : "#{h}h"
+  end
+
+  def award_book?(book)
+    book[:awards].to_s.strip != ''
   end
 
   def star_color(stars)

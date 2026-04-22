@@ -3,6 +3,19 @@ require 'word_wrap'
 require 'colorize'
 
 class Book < Hash
+  _word = /[\p{Lu}][\p{L}'']*(?:-[\p{Lu}][\p{L}'']*)*(?:\/[\p{Lu}][\p{L}'']*(?:-[\p{Lu}][\p{L}'']*)*)?/
+  _conn = /of|the|and|for|in|de|la/
+  _term = /(?:Awards?|Prizes?)(?!-)/
+  _qual = /[Ff]inalist|[Hh]onoree|[Nn]ominee/
+  AWARD_RE = Regexp.new(
+    "\\b(#{_word.source}(?:\\s+(?:#{_conn.source})\\s+(?:the\\s+)?#{_word.source}|\\s+#{_word.source})*" \
+    "\\s+#{_term.source}(?:\\s+(?:#{_qual.source}))?)"
+  )
+  NOBEL_CTX = /
+    \.\s+Nobel(?:\s+\p{Lu}\p{L}*)?\s+Prize(?:\.|\s+(?:in|for)\s+(?:literature|\d{4}))
+    |
+    \bAwarded\s+Nobel(?:\s+\p{Lu}\p{L}*)?\s+Prize
+  /xi
   attr_accessor :category_array
 
   @@fields = %i[author title stars ratings categories year awards target_age reading_time key blurb
@@ -136,7 +149,14 @@ class Book < Hash
     if blurb =~ /\. +For ((grades [Kk0-9-]*)|(junior.*)|(senior.*)|(preschool.*)|(kindergarten.*)).$/
       self[:target_age] ||= ::Regexp.last_match(1)
     end
-    self[:awards] ||= ::Regexp.last_match(1) if blurb =~ /\. ([^.]*(Award|Prize)[^.]*)\. ([0-9]{4})\./
+    _text = blurb.to_s.gsub(/Nat'l\b/i, 'National')
+    award_matches = _text.scan(AWARD_RE).map(&:first).uniq
+    award_matches.reject! { |m| m =~ /\A(?:By|The|Winner)\b/ }
+    award_matches.select! { |m| m !~ /\bNobel\b/i || _text.match?(NOBEL_CTX) }
+    if self[:language].to_s.empty? || self[:language] == 'English'
+      award_matches.select! { |m| _text[-100..].to_s.include?(m) }
+    end
+    self[:awards] = award_matches.join('; ') unless award_matches.empty?
     self[:year] ||= ::Regexp.last_match(1) if blurb =~ /\. +([0-9]{4})\./
     self[:product] ||= 'commercial audiobook' if blurb =~ /commercial audiobook/i
     self[:language] ||= 'English'

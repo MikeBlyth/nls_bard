@@ -6,7 +6,8 @@
 }">
 
   <!-- Search form -->
-  <form hx-post="/search"
+  <form id="search-form"
+        hx-post="/search"
         hx-target="#results"
         hx-swap="innerHTML"
         hx-indicator="#spinner"
@@ -91,6 +92,13 @@
 
     </div>
   </form>
+
+  <!-- Category filter -->
+  <div id="cat-filter"
+       hx-get="/categories"
+       hx-trigger="load"
+       hx-swap="innerHTML"
+       class="border-t border-slate-700 mt-4 -mx-1"></div>
 
   <!-- Results -->
   <div id="results" class="mt-6"></div>
