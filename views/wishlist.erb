@@ -1,0 +1,50 @@
+<div class="space-y-6">
+
+  <!-- Header + actions -->
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-bold text-slate-100">Wishlist</h2>
+    <button hx-post="/wishlist/check"
+            hx-target="#wishlist-items"
+            hx-swap="innerHTML"
+            hx-indicator="#check-spinner"
+            class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      Check matches
+      <span id="check-spinner" class="htmx-indicator">
+        <svg class="animate-spin h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+      </span>
+    </button>
+  </div>
+
+  <!-- Add form -->
+  <form hx-post="/wishlist"
+        hx-target="#wishlist-items"
+        hx-swap="innerHTML"
+        hx-on::after-request="this.reset()"
+        class="bg-slate-800 border border-slate-700 rounded-xl p-5 space-y-3">
+    <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wide">Add to wishlist</h3>
+    <div class="flex gap-3">
+      <input type="text" name="title" placeholder="Title" required
+             class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition">
+      <input type="text" name="author" placeholder="Author" required
+             class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition">
+      <button type="submit"
+              class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-lg transition text-sm whitespace-nowrap">
+        + Add
+      </button>
+    </div>
+  </form>
+
+  <!-- Wishlist items -->
+  <div id="wishlist-items"
+       hx-get="/wishlist/items"
+       hx-trigger="load">
+    <div class="text-slate-500 text-sm py-8 text-center">Loading…</div>
+  </div>
+
+</div>

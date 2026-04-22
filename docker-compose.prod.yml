@@ -19,9 +19,39 @@ services:
       - postgres_data_prod:/var/lib/postgresql/data  # Named volume for reliability
       - /mnt/c/Users/mike/bard/db_dump:/db_dump  # Windows-accessible backup location
       - ./db_init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on empty database
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+
+  web:
+    image: nls-bard-prod:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    depends_on:
+      - db
+    entrypoint: ["ruby", "web.rb"]
+    environment:
+      DATABASE_URL: postgres://mike:${POSTGRES_PASSWORD}@db/nlsbard
+      POSTGRES_HOST: db
+      POSTGRES_DB: nlsbard
+      POSTGRES_USER: mike
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      NLS_BARD_USERNAME: ${NLS_BARD_USERNAME}
+      NLS_BARD_PASSWORD: ${NLS_BARD_PASSWORD}
+      CONTAINER_DOWNLOAD_PATH: /home/appuser/Downloads
+      BARD_ENVIRONMENT: production
+      HF_HOME: /opt/huggingface_cache
+    volumes:
+      - ${WIN_DOWNLOADS_PATH}:/home/appuser/Downloads
+      - ./db_dump:/app/db_dump
+      - huggingface_cache:/opt/huggingface_cache
+    ports:
+      - "4567:4567"
     restart: unless-stopped
 
   app:
+    image: nls-bard-prod:latest
     build:
       context: .
       dockerfile: Dockerfile.prod

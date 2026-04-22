@@ -1,0 +1,98 @@
+<div x-data="{
+  mode: 'find',
+  showAuthor: true,
+  compact: false,
+  updateAuthor() { this.showAuthor = this.mode !== 'full' }
+}">
+
+  <!-- Search form -->
+  <form hx-post="/search"
+        hx-target="#results"
+        hx-swap="innerHTML"
+        hx-indicator="#spinner"
+        class="space-y-4">
+
+    <!-- Main search input -->
+    <div class="flex gap-3">
+      <input type="text" name="query" placeholder="Search titles, authors, topics…"
+             autofocus
+             class="flex-1 bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base transition">
+      <button type="submit"
+              class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        Search
+      </button>
+    </div>
+
+    <!-- Author field (hidden for full-text mode) -->
+    <div x-show="showAuthor" x-transition>
+      <input type="text" name="author" placeholder="Author (optional)"
+             class="w-full bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base transition">
+    </div>
+
+    <!-- Options row -->
+    <div class="flex flex-wrap gap-4 items-center">
+
+      <!-- Mode selector -->
+      <div class="flex bg-slate-800 rounded-lg border border-slate-600 p-1 gap-1">
+        <% [['find', 'Find'], ['fuzzy', 'Fuzzy'], ['full', 'Full Text']].each do |val, label| %>
+          <label class="cursor-pointer">
+            <input type="radio" name="mode" value="<%= val %>" x-model="mode" @change="updateAuthor()" class="sr-only">
+            <span :class="mode === '<%= val %>' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'"
+                  class="px-3 py-1 rounded-md text-sm font-medium transition select-none block">
+              <%= label %>
+            </span>
+          </label>
+        <% end %>
+      </div>
+
+      <!-- Media type -->
+      <select name="media_type"
+              class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 transition">
+        <option value="DB">Audio</option>
+        <option value="BR">Braille</option>
+        <option value="all">All types</option>
+      </select>
+
+      <!-- Language -->
+      <select name="language"
+              class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 transition">
+        <option value="English">English</option>
+        <option value="Spanish">Spanish</option>
+        <option value="French">French</option>
+        <option value="all">All languages</option>
+      </select>
+
+      <!-- Sort -->
+      <select name="sort"
+              class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500 transition">
+        <option value="stars">Sort: Rating</option>
+        <option value="relevance">Sort: Relevance</option>
+      </select>
+
+      <!-- Limit -->
+      <div class="flex items-center gap-2 text-sm text-slate-400">
+        <span>Show</span>
+        <input type="number" name="limit" value="25" min="1" max="500"
+               class="w-16 bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-center text-slate-300 focus:outline-none focus:border-indigo-500 transition text-sm">
+        <span>results</span>
+      </div>
+
+      <!-- Spinner -->
+      <div id="spinner" class="htmx-indicator text-indigo-400 text-sm flex items-center gap-2">
+        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        Searching…
+      </div>
+
+    </div>
+  </form>
+
+  <!-- Results -->
+  <div id="results" class="mt-6"></div>
+
+</div>

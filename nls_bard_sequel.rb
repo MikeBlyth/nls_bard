@@ -45,7 +45,8 @@ class BookDatabase
   end
 
   def insert_cat_book(category, book_key)
-    @cat_book.insert(category:, book: book_key) unless cat_book_exists?(category, book_key)
+    cat = category.downcase
+    @cat_book.insert(category: cat, book: book_key) unless cat_book_exists?(cat, book_key)
   end
 
   def books_with_desired_category
@@ -78,7 +79,7 @@ class BookDatabase
   end
 
   def insert_cat(newcat)
-    @cats.insert(newcat) unless cat_exists?(newcat)
+    @cats.insert(newcat.downcase) unless cat_exists?(newcat.downcase)
   end
 
   def get_book(key)
@@ -94,16 +95,24 @@ class BookDatabase
   end
 
   def get_by_hash(filters) # This one uses case-insensitive filter and only certain fields
-    q = @books.filter(Sequel.ilike(:title, "%#{filters[:title] || ''}%") &
-                      Sequel.ilike(:author, "%#{filters[:author] || ''}%") &
-                      Sequel.ilike(:blurb, "%#{filters[:blurb] || ''}%"))
+    title_q  = filters[:title]  || ''
+    author_q = filters[:author] || ''
+    blurb_q  = filters[:blurb]  || ''
+    text_cond = if !title_q.empty? && author_q.empty?
+                  Sequel.ilike(:title, "%#{title_q}%") | Sequel.ilike(:author, "%#{title_q}%")
+                else
+                  Sequel.ilike(:title, "%#{title_q}%") & Sequel.ilike(:author, "%#{author_q}%")
+                end
+    q = @books.filter(text_cond & Sequel.ilike(:blurb, "%#{blurb_q}%"))
     q = q.where(language: filters[:language]) if filters[:language]
+    q = q.where(Sequel.ilike(:key, "#{filters[:media_type]}%")) if filters[:media_type]
     q.order(Sequel.desc(Sequel.function(:coalesce, :stars, 0)))
   end
 
 
   def get_by_hash_fuzzy(filters, threshold: 0.3)
     query = filters[:language] ? @books.where(language: filters[:language]) : @books.dup
+    query = query.where(Sequel.ilike(:key, "#{filters[:media_type]}%")) if filters[:media_type]
 
     # For titles, we use a standard ILIKE search. This is stable for phrases.
     if (title_filter = filters[:title] || '') > ''
@@ -770,7 +779,7 @@ class BookDatabase
     puts "   Found #{match_count} matches"
     
     # Display the matches found
-    display_wishlist_matches(wishlist, new_books)
+    display_wishlist_matches_legacy(wishlist, new_books)
     
     # Step 5: Update sheet with match details
     puts "5️⃣ Update Google Sheet with match details"
@@ -785,8 +794,8 @@ class BookDatabase
     true
   end
   
-  # Display matches in the same format as check_for_wishlist_matches
-  def display_wishlist_matches(wishlist, new_books = nil)
+  # Legacy display method used by Google Sheets sync path
+  def display_wishlist_matches_legacy(wishlist, new_books = nil)
     found_any = false
     
     wishlist.each do |item|
@@ -961,7 +970,7 @@ class BookDatabase
     end.sort_by { |item| item[:title].downcase }
   end
 
-  def get_by_full_text(query_string, limit: 25, sort_by_relevance: false, language: 'English')
+  def get_by_full_text(query_string, limit: 25, sort_by_relevance: false, language: 'English', media_type: nil)
     return @books.where(Sequel.lit('false')) if query_string.strip.empty?
 
     emb = query_embedding(query_string)
@@ -970,6 +979,7 @@ class BookDatabase
     emb_lit = "[#{emb.join(',')}]"
     @DB.run("SET hnsw.ef_search = #{[[limit * 2, 100].max, 1000].min}")
     base = language ? @books.where(language: language) : @books
+    base = base.where(Sequel.ilike(:key, "#{media_type}%")) if media_type
     inner = base
       .where(Sequel.lit('embedding IS NOT NULL'))
       .select_append(Sequel.lit('1 - (embedding <=> ?::vector) AS vector_score', emb_lit))

@@ -39,6 +39,7 @@ services:
       - huggingface_cache:/opt/huggingface_cache
     ports:
       - "3000:3000"
+      - "4567:4567"
     # Keep the container running for development.
     command: sleep infinity
     tty: true

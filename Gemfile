@@ -27,6 +27,9 @@ gem 'shellwords' # turns string into command-line-like args
 gem 'word_wrap'
 gem 'zip'
 gem 'google-api-client' # Google Sheets API integration
+gem 'sinatra'
+gem 'sinatra-contrib'
+gem 'puma'
 
 
 group :development, :test do
@@ -40,3 +43,5 @@ end
 group :test do
   gem 'rspec'
 end
+
+gem "rackup", "~> 2.3"

@@ -1,0 +1,54 @@
+<% if @items.empty? %>
+  <p class="text-slate-500 text-center py-12">Your wishlist is empty.</p>
+<% else %>
+  <p class="text-slate-500 text-sm mb-3"><%= @items.count %> item<%= @items.count == 1 ? '' : 's' %></p>
+  <div class="space-y-2">
+    <% @items.each do |item| %>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl px-5 py-4" id="wish-<%= item[:id] %>">
+        <div class="flex items-start justify-between gap-4">
+
+          <!-- Wish info -->
+          <div class="min-w-0">
+            <p class="font-medium text-slate-200 leading-snug"><%= h(item[:wish_title]) %></p>
+            <p class="text-slate-500 text-sm mt-0.5"><%= h(item[:wish_author]) %></p>
+          </div>
+
+          <!-- Remove button -->
+          <button hx-delete="/wishlist/<%= item[:id] %>"
+                  hx-target="#wish-<%= item[:id] %>"
+                  hx-swap="outerHTML"
+                  hx-confirm="Remove '<%= h(item[:wish_title]) %>' from wishlist?"
+                  class="text-slate-600 hover:text-red-400 transition shrink-0 mt-0.5"
+                  title="Remove">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Match -->
+        <% if item[:book_key] %>
+          <div class="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-green-400 shrink-0">✓</span>
+              <span class="text-slate-300 text-sm truncate">
+                <span class="font-medium"><%= h(item[:book_title]) %></span>
+                <span class="text-slate-500"> by <%= h(item[:book_author]) %></span>
+              </span>
+              <span class="text-slate-600 text-xs font-mono shrink-0"><%= h(item[:book_key]) %></span>
+              <% if item[:stars] %>
+                <span class="<%= star_color(item[:stars]) %> text-xs shrink-0"><%= format_stars(item[:stars]) %></span>
+              <% end %>
+            </div>
+            <button @click="modalKey = '<%= h(item[:book_key]) %>'; modalOpen = true"
+                    class="text-indigo-400 hover:text-indigo-300 text-xs font-medium transition shrink-0">
+              View →
+            </button>
+          </div>
+        <% else %>
+          <p class="mt-2 text-slate-600 text-xs">No match found yet</p>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+<% end %>

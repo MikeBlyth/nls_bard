@@ -80,9 +80,26 @@ def download(key)
 
     book_title = download_link.text.sub('Download', '').strip
     puts "Initiating download for: #{book_title} (#{key})"
-    download_link.click
+    download_dir = ENV.fetch('CONTAINER_DOWNLOAD_PATH', '/app/downloads')
+    existing_temps = Dir.glob(File.join(download_dir, '*.crdownload')) +
+                     Dir.glob(File.join(download_dir, '.com.google.Chrome.*'), File::FNM_DOTMATCH)
 
-    puts 'Download initiated. Be sure to wait for it to complete before exiting the app.'
+    download_link.click
+    puts 'Download initiated. Waiting for file to complete...'
+
+    sleep 4  # give Chrome time to create temp file
+    deadline = Time.now + 300
+    while Time.now < deadline
+      files = (Dir.glob(File.join(download_dir, '*.crdownload')) +
+               Dir.glob(File.join(download_dir, '.com.google.Chrome.*'), File::FNM_DOTMATCH)) - existing_temps
+      break if files.empty?
+      size_kb = files.sum { |f| File.size(f) rescue 0 } / 1024
+      puts "Downloading... #{size_kb} KB"
+      sleep 2
+    end
+    puts 'Download complete.'
+    BardSessionManager.quit
+
     update_book_records(key, book_title)
   rescue Selenium::WebDriver::Error::TimeoutError
     puts "Timeout error: Could not find download elements for #{key}."

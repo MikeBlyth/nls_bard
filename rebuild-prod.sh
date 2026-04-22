@@ -23,6 +23,7 @@ echo "This may take a few minutes..."
 
 # Rebuild the production app image
 docker-compose -f docker-compose.prod.yml build app
+docker-compose -f docker-compose.prod.yml up -d --force-recreate web
 
 echo "✓ Production image rebuilt successfully!"
 echo ""
